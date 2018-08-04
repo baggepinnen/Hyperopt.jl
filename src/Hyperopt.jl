@@ -70,14 +70,14 @@ end
 
 function printmin(ho::Hyperoptimizer)
     m,i = minimum(ho)
-    for (param, value) in zip(hp.params, m)
+    for (param, value) in zip(ho.params, m)
         println(param, " = ", value)
     end
 end
 
 function printmax(ho::Hyperoptimizer)
     m,i = maximum(ho)
-    for (param, value) in zip(hp.params, m)
+    for (param, value) in zip(ho.params, m)
         println(param, " = ", value)
     end
 end
