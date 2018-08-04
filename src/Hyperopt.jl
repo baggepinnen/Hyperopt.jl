@@ -5,6 +5,7 @@ export Hyperoptimizer, @hyperopt, printmin, printmax
 using MacroTools
 using MacroTools: postwalk
 using Parameters
+using RecipesBase
 
 abstract type Sampler end
 struct RandomSampler <: Sampler end
@@ -83,5 +84,18 @@ function printmax(ho::Hyperoptimizer)
 end
 
 
+@recipe function plot(ho::Hyperoptimizer)
+    N = length(ho.params)
+    layout --> N
+    for i = 1:N
+        params = getindex.(ho.history, i)
+        perm = sortperm(params)
+        ylabel --> "Function value"
+        @series begin
+            xlabel --> ho.params[i]
+            params[perm], ho.results[perm]
+        end
+    end
+end
 
 end # module

@@ -52,7 +52,7 @@ c = 0.406077
 The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` above)
 The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = linspace(1,2,1000), b = [true, false], c = logspace(-1,3,1000)` above). Currently uniform random sampling from the candidate values is the only supported optimizer. Log-uniform sampling is achieved with uniform sampling of a logarithmically spaced vector, e.g. `c = logspace(-1,3,1000)`. The parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
 
-The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and can be queried for `minimum/maximum`, which returns the best parameters and function value found.
+The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and can be queried for `minimum/maximum`, which returns the best parameters and function value found. It can also be plotted using `plot(ho)` (uses `Plots.jl`).
 
 The type `Hyperoptimizer` is iterable, it iterates for the specified number of iterations, each iteration providing a sample of the parameter vector, e.g.
 ```julia
