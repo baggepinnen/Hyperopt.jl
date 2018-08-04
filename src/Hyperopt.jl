@@ -2,13 +2,14 @@ module Hyperopt
 
 export Hyperoptimizer, @hyperopt, printmin, printmax
 
+using Lazy
 using MacroTools
-using MacroTools: postwalk
+using MacroTools: postwalk, prewalk
 using Parameters
 using RecipesBase
+using DecisionTree
 
-abstract type Sampler end
-struct RandomSampler <: Sampler end
+include("samplers.jl")
 
 @with_kw struct Hyperoptimizer
     iterations::Int
@@ -28,11 +29,12 @@ function Hyperoptimizer(iterations::Int; kwargs...)
     Hyperoptimizer(iterations=iterations, params=params, candidates=candidates)
 end
 
+Lazy.@forward Hyperoptimizer.history Base.length, Base.getindex
 
 Base.start(ho::Hyperoptimizer) = 1
 
 function Base.next(ho::Hyperoptimizer, state)
-    samples = [list[rand(1:length(list))] for list in ho.candidates]
+    samples = ho.sampler(ho)
     push!(ho.history, samples)
     [state;samples], state+1
 end
@@ -43,13 +45,19 @@ macro hyperopt(ex)
     ex.head == :for || error("Wrong syntax, use for-loop syntax")
     params     = []
     candidates = []
-    postwalk(ex.args[1]) do x # ex.args[1] = the arguments to the for loop
+    sampler = RandomSampler()
+    ex.args[1] = prewalk(ex.args[1]) do x # ex.args[1] = the arguments to the for loop
+        if @capture(x, s = sam_) # A sampler was provided
+            sampler = eval(sam)
+            return nothing # Remove the sampler from the args
+        end
         @capture(x, param_ = list_) || return x
         push!(params, param)
         push!(candidates, list)
+        x
     end
     params = ntuple(i->params[i], length(params))
-    ho = Hyperoptimizer(iterations = candidates[1], params = params[2:end], candidates = eval.(candidates[2:end]))
+    ho = Hyperoptimizer(iterations = candidates[1], params = params[2:end], candidates = eval.(candidates[2:end]), sampler=sampler)
     quote
         for $(Expr(:tuple, esc.(params)...)) = $(ho)
             res = $(esc(ex.args[2])) # ex.args[2] = Body of the for loop
