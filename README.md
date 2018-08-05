@@ -80,3 +80,11 @@ end
 ```
 
 If uesd in this way, the hyperoptimizer **can not** keep track of the function values like it did when `@hyperopt` was used.
+
+# Categorical variables
+Currently, only `RandomSampler` supports categorical variables which do not have a natural floating point representation, such as functions:
+```julia
+@hyperopt for i=20, fun = [tanh, σ, relu]
+    train_network(fun)
+end
+```
