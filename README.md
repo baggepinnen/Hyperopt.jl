@@ -6,7 +6,7 @@
 
 [![codecov.io](http://codecov.io/github/baggepinnen/Hyperopt.jl/coverage.svg?branch=master)](http://codecov.io/github/baggepinnen/Hyperopt.jl?branch=master)
 
-A package to perform hyperparameter optimization. Currently supports only random search and  decision tree.
+A package to perform hyperparameter optimization. Currently supports random search, decision tree and random forest.
 
 # Usage
 
@@ -16,7 +16,7 @@ using Hyperopt
 f(x,a,b=true;c=10) = sum(@. x + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # Function to minimize
 
 # Main macro. The first argument to the for loop is always interpreted as the number of iterations
-julia> ho = @hyperopt for i=50, s = TreeSampler(random_init=5,n_samples=3,n_tries=20), a = linspace(1,5,1000), b = [true, false], c = logspace(-1,3,1000)
+julia> ho = @hyperopt for i=50, sampler = TreeSampler(random_init=5,samples_per_leaf=3,n_tries=20), a = linspace(1,5,1000), b = [true, false], c = logspace(-1,3,1000)
            print(i, "\t", a, "\t", b, "\t", c, "   \t")
            x = 100
            @show f(x,a,b,c=c)
@@ -55,7 +55,7 @@ c = 100.694
 ```
 
 The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` above)
-The sampel strategy can be specified by specifying the special symbol `s = Sampler(opts...)`. Available options are `RandomSampler` and `TreeSampler`.
+The sampel strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler`, `TreeSampler` and `ForestSampler`.
 The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = linspace(1,2,1000), b = [true, false], c = logspace(-1,3,1000)` above). Currently uniform random sampling from the candidate values is the only supported optimizer. Log-uniform sampling is achieved with uniform sampling of a logarithmically spaced vector, e.g. `c = logspace(-1,3,1000)`. The parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
 
 The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and can be queried for `minimum/maximum`, which returns the best parameters and function value found. It can also be plotted using `plot(ho)` (uses `Plots.jl`).

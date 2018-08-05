@@ -9,8 +9,7 @@ using Parameters
 using RecipesBase
 using DecisionTree
 
-include("samplers.jl")
-
+abstract type Sampler end
 @with_kw struct Hyperoptimizer
     iterations::Int
     params
@@ -19,6 +18,7 @@ include("samplers.jl")
     results = []
     sampler::Sampler = RandomSampler()
 end
+include("samplers.jl")
 
 function Hyperoptimizer(iterations::Int; kwargs...)
     params = ntuple(i->kwargs[i][1], length(kwargs))
@@ -45,10 +45,10 @@ macro hyperopt(ex)
     ex.head == :for || error("Wrong syntax, use for-loop syntax")
     params     = []
     candidates = []
-    sampler = RandomSampler()
+    sampler_ = :(RandomSampler())
     ex.args[1] = prewalk(ex.args[1]) do x # ex.args[1] = the arguments to the for loop
-        if @capture(x, s = sam_) # A sampler was provided
-            sampler = eval(sam)
+        if @capture(x, sampler = sam_) # A sampler was provided
+            sampler_ = sam
             return nothing # Remove the sampler from the args
         end
         @capture(x, param_ = list_) || return x
@@ -57,14 +57,13 @@ macro hyperopt(ex)
         x
     end
     params = ntuple(i->params[i], length(params))
-    ho = Hyperoptimizer(iterations = candidates[1], params = params[2:end], candidates = eval.(candidates[2:end]), sampler=sampler)
     quote
-        for $(Expr(:tuple, esc.(params)...)) = $(ho)
+        ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
+        for $(Expr(:tuple, esc.(params)...)) = ho
             res = $(esc(ex.args[2])) # ex.args[2] = Body of the for loop
-            push!($(ho).results, res)
-            res
+            push!(ho.results, res)
         end
-        $ho
+        ho
     end
 end
 
