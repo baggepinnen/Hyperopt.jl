@@ -1,8 +1,4 @@
-@static if VERSION < v"0.7.0-DEV.2005"
-    using Base.Test
-else
-    using Test
-end
+using Test
 
 
 using Hyperopt
@@ -75,7 +71,7 @@ ho2 = @hyperopt for i=100, random_init = 2:10,
     n_trees=n_trees)
 
 end
-ho = Hyperoptimizer(10, a = linspace(1,2), b = [true, false], c = randn(100))
+ho = Hyperoptimizer(10, a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
 for (i,a,b,c) in ho
     println(i, "\t", a, "\t", b, "\t", c)
 end
