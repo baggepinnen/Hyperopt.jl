@@ -2,7 +2,7 @@ using Test
 
 
 using Hyperopt
-f(x,a,b=true;c=10) = (sum(randn(1000000));sum(@. x + (a-3)^2 + (b ? 10 : 20) + (c-100)^2))
+f(x,a,b=true;c=10) = sum(@. x + (a-3)^2 + (b ? 10 : 20) + (c-100)^2)
 
 # res = map(1:50) do i
     # info("Iteration ", i)

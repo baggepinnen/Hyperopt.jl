@@ -41,11 +41,11 @@ end
 
 
 macro hyperopt(ex)
-    ex.head == :for || error("Wrong syntax, use for-loop syntax")
+    ex.head == :for || error("Wrong syntax, Use For-loop syntax")
     params     = []
     candidates = []
     sampler_ = :(RandomSampler())
-    loop = ex.args[1].args # ex.args[1] = the arguments to the for loop
+    loop = ex.args[1].args # ex.args[1] = the arguments to the For loop
     i = 1
     while i <= length(loop)
         if @capture(loop[i], sampler = sam_) # A sampler was provided
@@ -53,7 +53,7 @@ macro hyperopt(ex)
             deleteat!(loop,i) # Remove the sampler from the args
             continue
         end
-        @capture(loop[i], param_ = list_) || error("Wrong syntax in @hyperopt")
+        @capture(loop[i], param_ = list_) || error("Wrong syntax In @hyperopt")
         push!(params, param)
         push!(candidates, list)
         i += 1
@@ -62,7 +62,7 @@ macro hyperopt(ex)
     quote
         ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
         for $(Expr(:tuple, esc.(params)...)) = ho
-            res = $(esc(ex.args[2])) # ex.args[2] = Body of the for loop
+            res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
             push!(ho.results, res)
         end
         ho
@@ -108,16 +108,25 @@ end
             params[perm], ho.results[perm]
         end
 
-        !isa(ho.sampler,RandomSampler) && @series begin
+        if !isa(ho.sampler,RandomSampler)
             apply = ho.sampler isa TreeSampler ? apply_tree : apply_forest
             m = model(ho.sampler,ho)
-            xlabel --> ho.params[i]
-            subplot --> i
-            label --> "Model predictions (around best found value)"
-            xvals = repeat(minimum(ho)[1],1,length(params))
-            xvals[i,:] = params[perm]
-            linestyle --> :dash
-            params[perm], apply(m, copy(xvals'))
+            @series begin
+                xlabel --> ho.params[i]
+                subplot --> i
+                label --> "Model predictions (around best found value)"
+                xvals = repeat(minimum(ho)[1],1,length(params))
+                xvals[i,:] = params[perm]
+                linestyle --> :dash
+                params[perm], apply(m, copy(xvals'))
+            end
+            @series begin
+                xlabel --> ho.params[i]
+                subplot --> i
+                label --> "Model predictions (at samples)"
+                linestyle --> :dash
+                params[perm], apply(m, copy(hcat(ho.history...)'))
+            end
         end
     end
 end
