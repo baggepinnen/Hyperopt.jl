@@ -26,7 +26,7 @@ end
 function model(s::TreeSampler, ho::Hyperoptimizer)
     A = Float64.(hcat(ho.history...)')
     y = Float64.(ho.results)
-    model = build_tree(y, A, s.samples_per_leaf)
+    model = build_tree(y, A, s.samples_per_leaf)::DecisionTree
 end
 
 
@@ -43,7 +43,7 @@ end
 function model(s::ForestSampler, ho::Hyperoptimizer)
     A = Float64.(hcat(ho.history...)')
     y = Float64.(ho.results)
-    model = build_forest(y, A, s.n_features, s.n_trees, s.samples_per_leaf, s.samples_per_tree)
+    model = build_forest(y, A, s.n_features, s.n_trees, s.samples_per_leaf, s.samples_per_tree)::RandomForestRegressor
 end
 
 for T in [:TreeSampler, :ForestSampler]
@@ -53,6 +53,7 @@ for T in [:TreeSampler, :ForestSampler]
         length(ho) < s.random_init && return rs(ho)
 
         model_ = model(s, ho)
+        @show typeof(model_), ho
         bestsample = rs(ho)
         bestres = $(apply)(model_, bestsample)
         for t in 2:s.n_tries

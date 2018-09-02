@@ -31,21 +31,22 @@ end
 
 Lazy.@forward Hyperoptimizer.history Base.length, Base.getindex
 
-Base.start(ho::Hyperoptimizer) = 1
 
-function Base.next(ho::Hyperoptimizer, state)
+function Base.iterate(ho::Hyperoptimizer, state=1)
+    state > ho.iterations && return nothing
     samples = ho.sampler(ho)
     push!(ho.history, samples)
     [state;samples], state+1
 end
 
-Base.done(ho::Hyperoptimizer, state) = state > ho.iterations
 
 macro hyperopt(ex)
     ex.head == :for || error("Wrong syntax, use for-loop syntax")
     params     = []
     candidates = []
     sampler_ = :(RandomSampler())
+    dump(ex.args[1])
+    error()
     ex.args[1] = prewalk(ex.args[1]) do x # ex.args[1] = the arguments to the for loop
         if @capture(x, sampler = sam_) # A sampler was provided
             sampler_ = sam
