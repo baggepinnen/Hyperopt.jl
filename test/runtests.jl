@@ -6,14 +6,14 @@ f(x,a,b=true;c=10) = (sum(randn(1000000));sum(@. x + (a-3)^2 + (b ? 10 : 20) + (
 
 # res = map(1:50) do i
     # info("Iteration ", i)
-    hor = @hyperopt for i=50, sampler=RandomSampler(), a = range(1,stop=5, length=50), b = [true, false], c = exp10.(range(-1,stop=3, length=50))
+    hor = @hyperopt for i=100, sampler=RandomSampler(), a = range(1,stop=5, length=50), b = [true, false], c = exp10.(range(-1,stop=3, length=50))
         # println(i, "\t", a, "\t", b, "\t", c)
         x = 100
         # print(i, " ")
         f(x,a,b,c=c)
     end
-    minimum(hor)
-    hot = @hyperopt for i=50, sampler=TreeSampler(random_init=5,min_samples_leaf=3,n_tries=20), a = range(1,stop=5, length=50), b = [true, false], c = exp10.(range(-1,stop=3, length=50))
+    @test minimum(hor)[2] < 300
+    hot = @hyperopt for i=50, sampler=TreeSampler(random_init=5,samples_per_leaf=3,n_tries=20), a = range(1,stop=5, length=50), b = [true, false], c = exp10.(range(-1,stop=3, length=50))
         # println(i, "\t", a, "\t", b, "\t", c)
         x = 100
         # print(i, " ")

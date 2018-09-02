@@ -100,9 +100,24 @@ end
         params = getindex.(ho.history, i)
         perm = sortperm(params)
         ylabel --> "Function value"
+        seriestype --> :scatter
         @series begin
             xlabel --> ho.params[i]
+            subplot --> i
+            label --> "Sampled points"
             params[perm], ho.results[perm]
+        end
+
+        !isa(ho.sampler,RandomSampler) && @series begin
+            apply = ho.sampler isa TreeSampler ? apply_tree : apply_forest
+            m = model(ho.sampler,ho)
+            xlabel --> ho.params[i]
+            subplot --> i
+            label --> "Model predictions (around best found value)"
+            xvals = repeat(minimum(ho)[1],1,length(params))
+            xvals[i,:] = params[perm]
+            linestyle --> :dash
+            params[perm], apply(m, copy(xvals'))
         end
     end
 end
