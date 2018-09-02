@@ -6,7 +6,6 @@
 
 [![codecov.io](http://codecov.io/github/baggepinnen/Hyperopt.jl/coverage.svg?branch=master)](http://codecov.io/github/baggepinnen/Hyperopt.jl?branch=master)
 
-**Do not use this package, it is not working very well at the moment.**
 
 A package to perform hyperparameter optimization. Currently supports random search, decision tree and random forest.
 

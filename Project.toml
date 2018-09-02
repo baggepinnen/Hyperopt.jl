@@ -1,3 +1,8 @@
+name = "Hyperopt"
+version = "0.0.0"
+author = ["Fredrik Bagge Carlson <baggepinnen@gmail.com>"]
+uuid = "40a7b7db-c34b-58fd-b3c3-bfb967fe92ae"
+
 [deps]
 DecisionTree = "7806a523-6efd-50cb-b5f6-3fa6f1930dbb"
 Lazy = "50d2b5c4-7a5e-59d5-8109-a42b560f39c0"

@@ -24,26 +24,29 @@ end
 
 
 function model(s::TreeSampler, ho::Hyperoptimizer)
-    A = Float64.(hcat(ho.history...)')
+    A = copy(hcat(ho.history...)')
     y = Float64.(ho.results)
-    model = build_tree(y, A, s.samples_per_leaf)::DecisionTree
+    model = build_tree(y, A, s.samples_per_leaf)
 end
 
 
 @with_kw struct ForestSampler <: Sampler
     random_init::Int = 5
-    samples_per_leaf::Int = 5
     n_tries::Int = 20
-    n_features::Int = 2
-    samples_per_tree::Float64 = 0.7
     n_trees::Int = 5
+    n_subfeatures::Int = -1
+    partial_sampling::Float64 = 0.7
+    max_depth::Int = -1
+    min_samples_leaf::Int = 5
+    min_samples_split::Int = 2
+    min_purity_increase::Float64 = 0.0
 end
 
 
 function model(s::ForestSampler, ho::Hyperoptimizer)
-    A = Float64.(hcat(ho.history...)')
+    A = copy(hcat(ho.history...)')
     y = Float64.(ho.results)
-    model = build_forest(y, A, s.n_features, s.n_trees, s.samples_per_leaf, s.samples_per_tree)::RandomForestRegressor
+    model = build_forest(y, A, s.n_subfeatures, s.n_trees, s.partial_sampling, s.max_depth, s.min_samples_leaf, s.min_samples_split, s.min_purity_increase)
 end
 
 for T in [:TreeSampler, :ForestSampler]
@@ -53,7 +56,6 @@ for T in [:TreeSampler, :ForestSampler]
         length(ho) < s.random_init && return rs(ho)
 
         model_ = model(s, ho)
-        @show typeof(model_), ho
         bestsample = rs(ho)
         bestres = $(apply)(model_, bestsample)
         for t in 2:s.n_tries

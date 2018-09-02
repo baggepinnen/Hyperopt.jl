@@ -45,17 +45,18 @@ macro hyperopt(ex)
     params     = []
     candidates = []
     sampler_ = :(RandomSampler())
-    dump(ex.args[1])
-    error()
-    ex.args[1] = prewalk(ex.args[1]) do x # ex.args[1] = the arguments to the for loop
-        if @capture(x, sampler = sam_) # A sampler was provided
+    loop = ex.args[1].args # ex.args[1] = the arguments to the for loop
+    i = 1
+    while i <= length(loop)
+        if @capture(loop[i], sampler = sam_) # A sampler was provided
             sampler_ = sam
-            return nothing # Remove the sampler from the args
+            deleteat!(loop,i) # Remove the sampler from the args
+            continue
         end
-        @capture(x, param_ = list_) || return x
+        @capture(loop[i], param_ = list_) || error("Wrong syntax in @hyperopt")
         push!(params, param)
         push!(candidates, list)
-        x
+        i += 1
     end
     params = ntuple(i->params[i], length(params))
     quote
