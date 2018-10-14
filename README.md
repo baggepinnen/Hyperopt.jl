@@ -7,7 +7,7 @@
 [![codecov.io](http://codecov.io/github/baggepinnen/Hyperopt.jl/coverage.svg?branch=master)](http://codecov.io/github/baggepinnen/Hyperopt.jl?branch=master)
 
 
-A package to perform hyperparameter optimization. Currently supports random search, decision tree and random forest samplers, but currently only random search performs satisfactorily.
+A package to perform hyperparameter optimization. Currently supports random search, blue noise search, decision tree and random forest samplers, but currently only random and blue noise performs satisfactorily.
 
 # Usage
 
@@ -56,7 +56,7 @@ c = 100.694
 ```
 
 The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` above)
-The sampel strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler`, `TreeSampler` and `ForestSampler`.
+The sampel strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler`, `BlueNoiseSampler`, `TreeSampler` and `ForestSampler`.
 The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = linspace(1,2,1000), b = [true, false], c = logspace(-1,3,1000)` above). Currently uniform random sampling from the candidate values is the only supported optimizer. Log-uniform sampling is achieved with uniform sampling of a logarithmically spaced vector, e.g. `c = logspace(-1,3,1000)`. The parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
 
 The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and can be queried for `minimum/maximum`, which returns the best parameters and function value found. It can also be plotted using `plot(ho)` (uses `Plots.jl`).
@@ -83,9 +83,27 @@ end
 If uesd in this way, the hyperoptimizer **can not** keep track of the function values like it did when `@hyperopt` was used.
 
 # Categorical variables
-Currently, only `RandomSampler` supports categorical variables which do not have a natural floating point representation, such as functions:
+Currently, only `RandomSampler` and `BlueNoiseSampler` support categorical variables which do not have a natural floating point representation, such as functions:
 ```julia
 @hyperopt for i=20, fun = [tanh, σ, relu]
     train_network(fun)
 end
 ```
+Caveat for `BlueNoiseSampler`: see below.
+
+# Which sampler to use?
+Random is a good baseline and the default if none is chosen.
+
+If number of iterations is smaller than, say, 200, `BlueNoiseSampler` works better than random. Caveat: `BlueNoiseSampler` needs all candidate vectors to be of equal length, i.e.,
+```julia
+hob = @hyperopt for i=100, sampler=BlueNoiseSampler(), a = range(1,stop=5, length=100), b = repeat([true, false],50), c = exp10.(range(-1,stop=3, length=100))
+    # println(i, "\t", a, "\t", b, "\t", c)
+    # print(i, " ")
+    f(a,b,c=c)
+end
+```
+where all candidate vectors are of length 100. The candidates for `b` thus had to be repeated 50 times.
+
+`BlueNoiseSampler` performs an optimization problem in the beginning to spread out samples so as to sample the space as evenly as possible, both as measured in the full dimensional space, and in each dimension separately. Inspiration for this sampler comes from [Projective Blue-Noise Sampling](http://resources.mpi-inf.mpg.de/ProjectiveBlueNoise/ProjectiveBlueNoise.pdf) but the implemented algorithm is not the same.
+
+If the number of iterations is very large, the optimization problem might take long time to run in comparison to the runtime of a single experiment and random sampling will end up more effective.

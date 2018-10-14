@@ -2,6 +2,7 @@ module Hyperopt
 
 export Hyperoptimizer, @hyperopt, printmin, printmax
 
+using LinearAlgebra, Statistics
 using Lazy
 using MacroTools
 using MacroTools: postwalk, prewalk
