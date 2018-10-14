@@ -105,5 +105,7 @@ end
 where all candidate vectors are of length 100. The candidates for `b` thus had to be repeated 50 times.
 
 `BlueNoiseSampler` performs an optimization problem in the beginning to spread out samples so as to sample the space as evenly as possible, both as measured in the full dimensional space, and in each dimension separately. Inspiration for this sampler comes from [Projective Blue-Noise Sampling](http://resources.mpi-inf.mpg.de/ProjectiveBlueNoise/ProjectiveBlueNoise.pdf) but the implemented algorithm is not the same.
+The result of the blue noise optimization in 2 dimensions is visualized below. Initial values to the left and optimized to the right.
+![window](bluenoise.png)
 
 If the number of iterations is very large, the optimization problem might take long time to run in comparison to the runtime of a single experiment and random sampling will end up more effective.
