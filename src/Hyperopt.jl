@@ -106,6 +106,12 @@ end
             xlabel --> ho.params[i]
             subplot --> i
             label --> "Sampled points"
+            if /(extrema(params)...) < 2e-2 && minimum(params) > 0
+                xscale --> :log10
+            end
+            if /(extrema(ho.results)...) < 2e-2 && minimum(ho.results) > 0
+                yscale --> :log10
+            end
             params[perm], ho.results[perm]
         end
 
