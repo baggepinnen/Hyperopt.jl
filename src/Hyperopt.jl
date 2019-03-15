@@ -109,7 +109,7 @@ end
             params[perm], ho.results[perm]
         end
 
-        if !isa(ho.sampler,RandomSampler)
+        if ho.sampler isa TreeSampler || ho.sampler isa ForestSampler
             apply = ho.sampler isa TreeSampler ? apply_tree : apply_forest
             m = model(ho.sampler,ho)
             @series begin
