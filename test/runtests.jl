@@ -14,6 +14,13 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2)
     end
     @test minimum(hor)[2] < 300
 
+    horp = @phyperopt for i=100, sampler=RandomSampler(), a = range(1,stop=5, length=50), b = [true, false], c = exp10.(range(-1,stop=3, length=50))
+        # println(i, "\t", a, "\t", b, "\t", c)
+        # print(i, " ")
+        f(a,b,c=c)
+    end
+    @test minimum(horp)[2] < 300
+
     hob = @hyperopt for i=100, sampler=BlueNoiseSampler(), a = range(1,stop=5, length=100), b = repeat([true, false],50), c = exp10.(range(-1,stop=3, length=100))
         # println(i, "\t", a, "\t", b, "\t", c)
         # print(i, " ")

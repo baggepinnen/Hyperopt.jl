@@ -80,7 +80,15 @@ end
 10  1.4081632653061225  true    1.112896676939024
 ```
 
-If uesd in this way, the hyperoptimizer **can not** keep track of the function values like it did when `@hyperopt` was used.
+If used in this way, the hyperoptimizer **can not** keep track of the function values like it did when `@hyperopt` was used. To manually store the same data, consider a pattern like
+```julia
+ho = Hyperoptimizer(10, a = linspace(1,2), b = [true, false], c = randn(100))
+for (i,a,b,c) in ho
+    res = computations(a,b,c)
+    push!(ho.results, res)
+    push!(ho.history, [a,b,c])
+end
+```
 
 # Categorical variables
 Currently, only `RandomSampler` and `BlueNoiseSampler` support categorical variables which do not have a natural floating point representation, such as functions:
@@ -109,3 +117,6 @@ The result of the blue noise optimization in 2 dimensions is visualized below. I
 ![window](bluenoise.png)
 
 If the number of iterations is very large, the optimization problem might take long time to run in comparison to the runtime of a single experiment and random sampling will end up more effective.
+
+# Parallel execution
+The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.

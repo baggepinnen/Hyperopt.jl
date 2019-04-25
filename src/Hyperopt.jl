@@ -1,6 +1,6 @@
 module Hyperopt
 
-export Hyperoptimizer, @hyperopt, printmin, printmax
+export Hyperoptimizer, @hyperopt, @phyperopt, printmin, printmax
 
 using LinearAlgebra, Statistics
 using Lazy
@@ -9,6 +9,7 @@ using MacroTools: postwalk, prewalk
 using Parameters
 using RecipesBase
 using DecisionTree
+using Distributed
 
 abstract type Sampler end
 @with_kw struct Hyperoptimizer
@@ -22,7 +23,7 @@ end
 include("samplers.jl")
 
 function Hyperoptimizer(iterations::Int; kwargs...)
-    params = ntuple(i->kwargs[i][1], length(kwargs))
+    params = keys(kwargs)
     candidates = []
     for kw in kwargs
         push!(candidates, kw[2])
@@ -40,8 +41,7 @@ function Base.iterate(ho::Hyperoptimizer, state=1)
     [state;samples], state+1
 end
 
-
-macro hyperopt(ex)
+function preprocess_expression(ex)
     ex.head == :for || error("Wrong syntax, Use For-loop syntax")
     params     = []
     candidates = []
@@ -60,6 +60,12 @@ macro hyperopt(ex)
         i += 1
     end
     params = ntuple(i->params[i], length(params))
+
+    params, candidates, sampler_
+end
+
+macro hyperopt(ex)
+    params, candidates, sampler_ = preprocess_expression(ex)
     quote
         ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
         for $(Expr(:tuple, esc.(params)...)) = ho
@@ -67,6 +73,28 @@ macro hyperopt(ex)
             push!(ho.results, res)
         end
         ho
+    end
+end
+
+macro phyperopt(ex)
+    params, candidates, sampler_ = preprocess_expression(ex)
+    quote
+        function workaround_function()
+            ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
+
+            res = pmap(1:ho.iterations) do i
+                $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
+                res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
+
+                res, $(Expr(:tuple, esc.(params[2:end])...))
+            end
+            append!(ho.results, getindex.(res,1))
+            for r in res
+                push!(ho.history, r[2])
+            end
+            ho
+        end
+        workaround_function()
     end
 end
 
