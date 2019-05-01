@@ -1,10 +1,9 @@
 name = "Hyperopt"
 uuid = "40a7b7db-c34b-58fd-b3c3-bfb967fe92ae"
 author = ["Fredrik Bagge Carlson <baggepinnen@gmail.com>"]
-version = "0.0.0"
+version = "0.2.0"
 
 [deps]
-DecisionTree = "7806a523-6efd-50cb-b5f6-3fa6f1930dbb"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 Lazy = "50d2b5c4-7a5e-59d5-8109-a42b560f39c0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

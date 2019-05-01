@@ -1,6 +1,7 @@
 module Hyperopt
 
 export Hyperoptimizer, @hyperopt, @phyperopt, printmin, printmax
+export RandomSampler, BlueNoiseSampler
 
 using LinearAlgebra, Statistics
 using Lazy
@@ -8,7 +9,6 @@ using MacroTools
 using MacroTools: postwalk, prewalk
 using Parameters
 using RecipesBase
-using DecisionTree
 using Distributed
 
 abstract type Sampler end
@@ -143,26 +143,6 @@ end
             params[perm], ho.results[perm]
         end
 
-        if ho.sampler isa TreeSampler || ho.sampler isa ForestSampler
-            apply = ho.sampler isa TreeSampler ? apply_tree : apply_forest
-            m = model(ho.sampler,ho)
-            @series begin
-                xlabel --> ho.params[i]
-                subplot --> i
-                label --> "Model predictions (around best found value)"
-                xvals = repeat(minimum(ho)[1],1,length(params))
-                xvals[i,:] = params[perm]
-                linestyle --> :dash
-                params[perm], apply(m, copy(xvals'))
-            end
-            @series begin
-                xlabel --> ho.params[i]
-                subplot --> i
-                label --> "Model predictions (at samples)"
-                linestyle --> :dash
-                params[perm], apply(m, copy(hcat(ho.history...)'))
-            end
-        end
     end
 end
 
