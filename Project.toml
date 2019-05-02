@@ -1,5 +1,5 @@
 name = "Hyperopt"
-uuid = "40a7b7db-c34b-58fd-b3c3-bfb967fe92ae"
+uuid = "93e5fe13-2215-51db-baaf-2e9a34fb2712"
 author = ["Fredrik Bagge Carlson <baggepinnen@gmail.com>"]
 version = "0.2.0"
 
