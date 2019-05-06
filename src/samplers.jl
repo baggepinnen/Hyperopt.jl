@@ -66,3 +66,47 @@ function bluenoise(;
     end
     points
 end
+
+
+
+
+"""
+Sample from a latin hypercube
+"""
+@with_kw mutable struct LHSampler <: Sampler
+    samples = zeros(0,0)
+end
+function init!(s::LHSampler, ho)
+    s.samples != zeros(0,0) && return # Already initialized
+    ndims = length(ho.candidates)
+    X, fit = LHCoptim(ho.iterations,ndims,1000)
+    s.samples = copy(X')
+end
+
+function (s::LHSampler)(ho)
+    init!(s, ho)
+    iter = length(ho.history)+1
+    [list[s.samples[dim,iter]] for (dim,list) in enumerate(ho.candidates)]
+end
+
+"""
+    CLHSampler(dims=[Continuous(), Categorical(2), ...])
+Sample from a categorical/continuous latin hypercube. All continuous variables must have the same length of the candidate vectors.
+"""
+@with_kw mutable struct CLHSampler <: Sampler
+    samples = zeros(0,0)
+    dims = []
+end
+function init!(s::CLHSampler, ho)
+    s.samples != zeros(0,0) && return # Already initialized
+    ndims = length(ho.candidates)
+    initialSample = randomLHC(ho.iterations,s.dims)
+    X,_ = LHCoptim!(initialSample, 500, dims=s.dims)
+    s.samples = copy(X')
+end
+
+function (s::CLHSampler)(ho)
+    init!(s, ho)
+    iter = length(ho.history)+1
+    [list[s.samples[dim,iter]] for (dim,list) in enumerate(ho.candidates)]
+end

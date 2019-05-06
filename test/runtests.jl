@@ -28,6 +28,20 @@ hob = @hyperopt for i=100, sampler=BlueNoiseSampler(), a = LinRange(1,5,100), b 
 end
 @test minimum(hob)[2] < 300
 
+hol = @hyperopt for i=100, sampler=LHSampler(), a = LinRange(1,5,100), b = repeat([true, false],50), c = exp10.(LinRange(-1,3,100))
+    # println(i, "\t", a, "\t", b, "\t", c)
+    # print(i, " ")
+    f(a,b,c=c)
+end
+@test minimum(hol)[2] < 300
+
+hocl = @hyperopt for i=100, sampler=CLHSampler(dims=[Continuous(),Categorical(2),Continuous()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
+    # println(i, "\t", a, "\t", b, "\t", c)
+    # print(i, " ")
+    f(a,b,c=c)
+end
+@test minimum(hocl)[2] < 300
+
 
 #     minimum.((hor,hob,hot,hof))
 # end

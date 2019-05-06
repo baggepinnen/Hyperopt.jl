@@ -7,12 +7,12 @@
 [![codecov.io](http://codecov.io/github/baggepinnen/Hyperopt.jl/coverage.svg?branch=master)](http://codecov.io/github/baggepinnen/Hyperopt.jl?branch=master)
 
 
-A package to perform hyperparameter optimization. Currently supports random search and blue-noise search.
+A package to perform hyperparameter optimization. Currently supports random search, [latin hypercube sampling](https://en.wikipedia.org/wiki/Latin_hypercube_sampling) and blue-noise search.
 
 # Usage
 
 1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below).
-2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler` and `BlueNoiseSampler`.
+2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])` and `BlueNoiseSampler()`.
 3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` above). Currently uniform random sampling from the candidate values is the only supported optimizer. Log-uniform sampling is achieved with uniform sampling of a logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`. The parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
 
 The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and can be queried for `minimum/maximum`, which returns the best parameters and function value found. It can also be plotted using `plot(ho)` (uses `Plots.jl`).
@@ -24,7 +24,7 @@ f(x,a,b=true;c=10) = sum(@. x + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # Function 
 
 # Main macro. The first argument to the for loop is always interpreted as the number of iterations
 ho = @hyperopt for i=50,
-            sampler = RandomSampler(),
+            sampler = RandomSampler(), # This is default if none provided
             a = LinRange(1,5,1000),
             b = [true, false],
             c = exp10.(LinRange(-1,3,1000))
@@ -96,9 +96,13 @@ end
 ```
 
 # Categorical variables
-`RandomSampler` and `BlueNoiseSampler` support categorical variables which do not have a natural floating point representation, such as functions:
+`RandomSampler` `CLHSampler` and `BlueNoiseSampler` support categorical variables which do not have a natural floating point representation, such as functions:
 ```julia
 @hyperopt for i=20, fun = [tanh, σ, relu]
+    train_network(fun)
+end
+# or
+@hyperopt for i=20, sampler=CLHSampler(dims=[Categorical(2)]) fun = [tanh, σ, relu]
     train_network(fun)
 end
 ```
@@ -107,15 +111,24 @@ Caveat for `BlueNoiseSampler`: see below.
 # Which sampler to use?
 Random is a good baseline and the default if none is chosen.
 
-If number of iterations is smaller than, say, 200, `BlueNoiseSampler` works better than random. Caveat: `BlueNoiseSampler` needs all candidate vectors to be of equal length, i.e.,
+If number of iterations is small, `BlueNoiseSampler` or `LHSampler` works better than random. Caveat: `BlueNoiseSampler` and `LHSampler` need all candidate vectors to be of equal length, i.e.,
 ```julia
-hob = @hyperopt for i=100, sampler=BlueNoiseSampler(), a = range(1,stop=5, length=100), b = repeat([true, false],50), c = exp10.(range(-1,stop=3, length=100))
+hob = @hyperopt for i=100, sampler=BlueNoiseSampler(), a = LinRange(1,5,100), b = repeat([true, false],50), c = exp10.(LinRange(-1,3,100))
     # println(i, "\t", a, "\t", b, "\t", c)
     # print(i, " ")
     f(a,b,c=c)
 end
 ```
 where all candidate vectors are of length 100. The candidates for `b` thus had to be repeated 50 times.
+
+The categorical `LHSampler` circumvents this
+```julia
+hob = @hyperopt for i=100, sampler=CLHSampler(dims=[Continuous(), Categorical(2), Continuous()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
+    # println(i, "\t", a, "\t", b, "\t", c)
+    # print(i, " ")
+    f(a,b,c=c)
+end
+```
 
 `BlueNoiseSampler` performs an optimization problem in the beginning to spread out samples so as to sample the space as evenly as possible, both as measured in the full dimensional space, and in each dimension separately. Inspiration for this sampler comes from [Projective Blue-Noise Sampling](http://resources.mpi-inf.mpg.de/ProjectiveBlueNoise/ProjectiveBlueNoise.pdf) but the implemented algorithm is not the same.
 The result of the blue noise optimization in 2 dimensions is visualized below. Initial values to the left and optimized to the right.

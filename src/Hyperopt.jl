@@ -1,7 +1,7 @@
 module Hyperopt
 
 export Hyperoptimizer, @hyperopt, @phyperopt, printmin, printmax
-export RandomSampler, BlueNoiseSampler
+export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, Continuous, Categorical
 
 using LinearAlgebra, Statistics
 using Lazy
@@ -10,6 +10,7 @@ using MacroTools: postwalk, prewalk
 using Parameters
 using RecipesBase
 using Distributed
+using LatinHypercubeSampling
 
 abstract type Sampler end
 @with_kw struct Hyperoptimizer
