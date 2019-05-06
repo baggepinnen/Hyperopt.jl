@@ -10,7 +10,7 @@ A package to perform hyperparameter optimization. Currently supports random sear
 
 1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below).
 2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])` and `BlueNoiseSampler()`.
-3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` above). Currently uniform random sampling from the candidate values is the only supported optimizer. Log-uniform sampling is achieved with uniform sampling of a logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`. The parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
+3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below). Currently uniform random sampling from the candidate values is the only supported optimizer. Log-uniform sampling is achieved with uniform sampling of a logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`. The parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
 
 The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and can be queried for `minimum/maximum`, which returns the best parameters and function value found. It can also be plotted using `plot(ho)` (uses `Plots.jl`).
 
@@ -65,7 +65,7 @@ c = 100.694
 
 The type `Hyperoptimizer` is iterable, it iterates for the specified number of iterations, each iteration providing a sample of the parameter vector, e.g.
 ```julia
-ho = Hyperoptimizer(10, a = LinRange(1,2), b = [true, false], c = randn(100))
+ho = Hyperoptimizer(10, a = LinRange(1,2,50), b = [true, false], c = randn(100))
 for (i,a,b,c) in ho
     println(i, "\t", a, "\t", b, "\t", c)
 end
@@ -99,9 +99,10 @@ end
     train_network(fun)
 end
 # or
-@hyperopt for i=20, sampler=CLHSampler(dims=[Categorical(2)]),
-                    fun = [tanh, σ, relu]
-    train_network(fun)
+@hyperopt for i=20, sampler=CLHSampler(dims=[Categorical(3), Continuous()]),
+                    fun   = [tanh, σ, relu],
+                    param = LinRange(0,1,20)
+    train_network(fun, param)
 end
 ```
 Caveat for `BlueNoiseSampler`: see below.
