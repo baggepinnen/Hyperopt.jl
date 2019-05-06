@@ -1,9 +1,6 @@
 # Hyperopt
 
 [![Build Status](https://travis-ci.org/baggepinnen/Hyperopt.jl.svg?branch=master)](https://travis-ci.org/baggepinnen/Hyperopt.jl)
-
-[![Coverage Status](https://coveralls.io/repos/baggepinnen/Hyperopt.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/baggepinnen/Hyperopt.jl?branch=master)
-
 [![codecov.io](http://codecov.io/github/baggepinnen/Hyperopt.jl/coverage.svg?branch=master)](http://codecov.io/github/baggepinnen/Hyperopt.jl?branch=master)
 
 
@@ -102,7 +99,8 @@ end
     train_network(fun)
 end
 # or
-@hyperopt for i=20, sampler=CLHSampler(dims=[Categorical(2)]) fun = [tanh, σ, relu]
+@hyperopt for i=20, sampler=CLHSampler(dims=[Categorical(2)]),
+                    fun = [tanh, σ, relu]
     train_network(fun)
 end
 ```
@@ -113,19 +111,22 @@ Random is a good baseline and the default if none is chosen.
 
 If number of iterations is small, `BlueNoiseSampler` or `LHSampler` works better than random. Caveat: `BlueNoiseSampler` and `LHSampler` need all candidate vectors to be of equal length, i.e.,
 ```julia
-hob = @hyperopt for i=100, sampler=BlueNoiseSampler(), a = LinRange(1,5,100), b = repeat([true, false],50), c = exp10.(LinRange(-1,3,100))
-    # println(i, "\t", a, "\t", b, "\t", c)
-    # print(i, " ")
+hob = @hyperopt for i=100, sampler=BlueNoiseSampler(),
+                            a = LinRange(1,5,100),
+                            b = repeat([true, false],50),
+                            c = exp10.(LinRange(-1,3,100))
     f(a,b,c=c)
 end
 ```
 where all candidate vectors are of length 100. The candidates for `b` thus had to be repeated 50 times.
 
-The categorical `LHSampler` circumvents this
+The categorical `CLHSampler` circumvents this
 ```julia
-hob = @hyperopt for i=100, sampler=CLHSampler(dims=[Continuous(), Categorical(2), Continuous()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
-    # println(i, "\t", a, "\t", b, "\t", c)
-    # print(i, " ")
+hob = @hyperopt for i=100,
+                    sampler=CLHSampler(dims=[Continuous(), Categorical(2), Continuous()]),
+                    a = LinRange(1,5,100),
+                    b = [true, false],
+                    c = exp10.(LinRange(-1,3,100))
     f(a,b,c=c)
 end
 ```

@@ -16,6 +16,8 @@ end
 function init!(s::BlueNoiseSampler, ho)
     s.samples != zeros(0,0) && return # Already initialized
     dims = length(ho.candidates)
+    all(length(c) == ho.iterations for c in ho.candidates) ||
+        throw(ArgumentError("BlueNoiseSampler requires all candidate vectors to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, length.(ho.candidates)))))"))
     s.samples = bluenoise(dims = dims, nsamples = ho.iterations)
     s.orders = [sortperm(s.samples[dim,:]) for dim = 1:dims]
 end
@@ -79,6 +81,8 @@ end
 function init!(s::LHSampler, ho)
     s.samples != zeros(0,0) && return # Already initialized
     ndims = length(ho.candidates)
+    all(length(c) == ho.iterations for c in ho.candidates) ||
+        throw(ArgumentError("Latin hypercube sampling requires all candidate vectors to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, length.(ho.candidates)))))"))
     X, fit = LHCoptim(ho.iterations,ndims,1000)
     s.samples = copy(X')
 end
@@ -99,6 +103,9 @@ Sample from a categorical/continuous latin hypercube. All continuous variables m
 end
 function init!(s::CLHSampler, ho)
     s.samples != zeros(0,0) && return # Already initialized
+    all(zip(s.dims, ho.candidates)) do (d,c)
+        d isa Categorical || length(c) == ho.iterations
+    end || throw(ArgumentError("Latin hypercube sampling requires all candidate vectors for Continuous variables to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, length.(ho.candidates)))))"))
     ndims = length(ho.candidates)
     initialSample = randomLHC(ho.iterations,s.dims)
     X,_ = LHCoptim!(initialSample, 500, dims=s.dims)

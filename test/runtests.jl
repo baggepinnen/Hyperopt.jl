@@ -43,6 +43,26 @@ end
 @test minimum(hocl)[2] < 300
 
 
+
+# Error handling
+@test_throws ArgumentError @hyperopt for i=100, sampler=BlueNoiseSampler(), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
+    # println(i, "\t", a, "\t", b, "\t", c)
+    # print(i, " ")
+    f(a,b,c=c)
+end
+
+@test_throws ArgumentError @hyperopt for i=100, sampler=LHSampler(), a = LinRange(1,5,10), b = repeat([true, false],50), c = exp10.(LinRange(-1,3,100))
+    # println(i, "\t", a, "\t", b, "\t", c)
+    # print(i, " ")
+    f(a,b,c=c)
+end
+
+@test_throws ArgumentError @hyperopt for i=100, sampler=CLHSampler(dims=[Continuous(),Categorical(2),Continuous()]), a = LinRange(1,5,99), b = [true, false], c = exp10.(LinRange(-1,3,100))
+    # println(i, "\t", a, "\t", b, "\t", c)
+    # print(i, " ")
+    f(a,b,c=c)
+end
+
 #     minimum.((hor,hob,hot,hof))
 # end
 
