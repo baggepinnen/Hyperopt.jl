@@ -17,7 +17,7 @@ function init!(s::BlueNoiseSampler, ho)
     s.samples != zeros(0,0) && return # Already initialized
     dims = length(ho.candidates)
     all(length(c) == ho.iterations for c in ho.candidates) ||
-        throw(ArgumentError("BlueNoiseSampler requires all candidate vectors to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, length.(ho.candidates)))))"))
+        throw(ArgumentError("BlueNoiseSampler requires all candidate vectors to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, length.(ho.candidates))))) with $(ho.iterations) iterations"))
     s.samples = bluenoise(dims = dims, nsamples = ho.iterations)
     s.orders = [sortperm(s.samples[dim,:]) for dim = 1:dims]
 end
@@ -77,13 +77,15 @@ Sample from a latin hypercube
 """
 @with_kw mutable struct LHSampler <: Sampler
     samples = zeros(0,0)
+    iters = -1
 end
 function init!(s::LHSampler, ho)
     s.samples != zeros(0,0) && return # Already initialized
     ndims = length(ho.candidates)
     all(length(c) == ho.iterations for c in ho.candidates) ||
-        throw(ArgumentError("Latin hypercube sampling requires all candidate vectors to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, length.(ho.candidates)))))"))
-    X, fit = LHCoptim(ho.iterations,ndims,1000)
+        throw(ArgumentError("Latin hypercube sampling requires all candidate vectors to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, length.(ho.candidates))))) with $(ho.iterations) iterations"))
+        s.iters == -1 && (s.iters = (1000*100*2)÷ho.iterations÷ndims)
+    X, fit = LHCoptim(ho.iterations,ndims,s.iters)
     s.samples = copy(X')
 end
 
