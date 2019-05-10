@@ -23,7 +23,7 @@ abstract type Sampler end
 end
 
 function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
-    s == :minimum && (return minimum(ho.results))
+    s == :minimum && (return minimum(replace(ho.results, NaN => Inf)))
     s == :minimizer && (return minimum(ho)[1])
     return getfield(ho,s)
 end
@@ -107,11 +107,11 @@ macro phyperopt(ex)
 end
 
 function Base.minimum(ho::Hyperoptimizer)
-    m,i = findmin(ho.results)
+    m,i = findmin(replace(ho.results, NaN => Inf))
     ho.history[i], m
 end
 function Base.maximum(ho::Hyperoptimizer)
-    m,i = findmax(ho.results)
+    m,i = findmax(replace(ho.results, NaN => Inf))
     ho.history[i], m
 end
 
@@ -142,6 +142,7 @@ end
             xlabel --> ho.params[i]
             subplot --> i
             label --> "Sampled points"
+            legend --> false
             if /(extrema(params)...) < 2e-2 && minimum(params) > 0
                 xscale --> :log10
             end
