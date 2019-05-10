@@ -21,6 +21,13 @@ abstract type Sampler end
     results = []
     sampler::Sampler = RandomSampler()
 end
+
+function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
+    s == :minimum && (return minimum(ho.results))
+    s == :minimizer && (return minimum(ho)[1])
+    return getfield(ho,s)
+end
+
 include("samplers.jl")
 
 function Hyperoptimizer(iterations::Int; kwargs...)
