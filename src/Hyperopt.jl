@@ -4,6 +4,7 @@ export Hyperoptimizer, @hyperopt, @phyperopt, printmin, printmax
 export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, Continuous, Categorical
 
 using LinearAlgebra, Statistics
+using Juno
 using Lazy
 using MacroTools
 using MacroTools: postwalk, prewalk
@@ -50,7 +51,7 @@ function Base.iterate(ho::Hyperoptimizer, state=1)
 end
 
 function preprocess_expression(ex)
-    ex.head == :for || error("Wrong syntax, Use For-loop syntax")
+    ex.head == :for || error("Wrong syntax, Use For-loop syntax, ex: @hyperopt for i=100, param=LinRange(1,10,100) ...")
     params     = []
     candidates = []
     sampler_ = :(RandomSampler())
@@ -62,7 +63,7 @@ function preprocess_expression(ex)
             deleteat!(loop,i) # Remove the sampler from the args
             continue
         end
-        @capture(loop[i], param_ = list_) || error("Wrong syntax In @hyperopt")
+        @capture(loop[i], param_ = list_) || error("Wrong syntax, Use For-loop syntax, ex: @hyperopt for i=100, param=LinRange(1,10,100) ...")
         push!(params, param)
         push!(candidates, list)
         i += 1
@@ -76,9 +77,12 @@ macro hyperopt(ex)
     params, candidates, sampler_ = preprocess_expression(ex)
     quote
         ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
-        for $(Expr(:tuple, esc.(params)...)) = ho
-            res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
-            push!(ho.results, res)
+        Juno.progress() do id
+            for $(Expr(:tuple, esc.(params)...)) = ho
+                res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
+                push!(ho.results, res)
+                Base.CoreLogging.@logmsg -1 "Hyperopt" progress=$(esc(params[1]))/ho.iterations  _id=id
+            end
         end
         ho
     end

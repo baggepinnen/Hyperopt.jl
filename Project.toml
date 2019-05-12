@@ -1,10 +1,11 @@
 name = "Hyperopt"
 uuid = "93e5fe13-2215-51db-baaf-2e9a34fb2712"
 author = ["Fredrik Bagge Carlson <baggepinnen@gmail.com>"]
-version = "0.2.1"
+version = "0.2.2"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+Juno = "e5e0dc1b-0480-54bc-9374-aad01c23163d"
 LatinHypercubeSampling = "a5e1c1ea-c99a-51d3-a14d-a9a37257b02d"
 Lazy = "50d2b5c4-7a5e-59d5-8109-a42b560f39c0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -16,5 +17,5 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-julia = "1.0"
 LatinHypercubeSampling = "1.2"
+julia = "1.0"
