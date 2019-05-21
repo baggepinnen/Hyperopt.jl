@@ -24,9 +24,9 @@ end
 
 function robust_acq(model)
     acqfunc = BayesianOptimization.acquisitionfunction(BayesianOptimization.ExpectedImprovement(maximum(model.y)), model)
-    map(eachcol(model.x)) do c
+    map(1:size(model.x,2)) do i
         try
-            return acqfunc(c)
+            return acqfunc(model.x[:,i])
         catch
             return -Inf
         end
