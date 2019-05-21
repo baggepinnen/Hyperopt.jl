@@ -136,8 +136,8 @@ Sample using Bayesian optimization. `GPSampler(Min)/GPSampler(Max)` fits a Gauss
     modeloptimizer = nothing
     logdims = nothing
     candidates = nothing
-    GPSampler() = error("The GPSampler needs to know if you want to maximize or minimize. Choose between `GPSampler(Max)/GPSampler(Min)`")
 end
+GPSampler() = error("The GPSampler needs to know if you want to maximize or minimize. Choose between `GPSampler(Max)/GPSampler(Min)`")
 GPSampler(sense) = GPSampler(sense=sense)
 
 function islogspace(x)
@@ -194,8 +194,12 @@ function (s::GPSampler)(ho)
         return [rand(list) for (dim,list) in enumerate(ho.candidates)]
     else
         input = reshape(to_logspace(float.(ho.history[end]), s.logdims), :, 1)
-        BayesianOptimization.update!(s.model, input, [Int(s.sense)*ho.results[end]])
-        BayesianOptimization.optimizemodel!(s.modeloptimizer, s.model) # This determines whether to run or not internally?
+        try
+            BayesianOptimization.update!(s.model, input, [Int(s.sense)*ho.results[end]])
+            BayesianOptimization.optimizemodel!(s.modeloptimizer, s.model) # This determines whether to run or not internally?
+        catch ex
+            @warn("BayesianOptimization failed at iter $iter: error: ", ex)
+        end
     end
 
     acqfunc = BayesianOptimization.acquisitionfunction(ExpectedImprovement(Int(s.sense)*maximum(ho.results)), s.model)

@@ -1,6 +1,6 @@
 using Test, Random
 Random.seed!(0)
-using Hyperopt
+using Hyperopt, Plots
 
 @testset "Hyperopt" begin
     f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2)
@@ -43,12 +43,12 @@ using Hyperopt
     @test minimum(hocl)[2] < 300
 
 
-    hogp = @hyperopt for i=100, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
+    hogp = @hyperopt for i=50, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
         # println(i, "\t", a, "\t", b, "\t", c)
         # print(i, " ")
         f(a,Bool(b),c=c)
     end
-    @test minimum(hogp)[2] < 200
+    @test minimum(hogp)[2] < 300
 
     plot(hogp.sampler)
     plot(hogp)
