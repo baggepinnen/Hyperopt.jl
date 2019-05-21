@@ -136,8 +136,8 @@ Sample using Bayesian optimization. `GPSampler(Min)/GPSampler(Max)` fits a Gauss
     modeloptimizer = nothing
     logdims = nothing
     candidates = nothing
+    GPSampler() = error("The GPSampler needs to know if you want to maximize or minimize. Choose between `GPSampler(Max)/GPSampler(Min)`")
 end
-GPSampler() = error("The GPSampler needs to know if you want to maximize or minimize. Choose between `GPSampler(Max)/GPSampler(Min)`")
 GPSampler(sense) = GPSampler(sense=sense)
 
 function islogspace(x)
