@@ -167,11 +167,11 @@ function init!(s::GPSampler, ho)
     upper_bounds = [maximum.(candidates)...]
     widths = upper_bounds - lower_bounds
     kernel_widths = widths/10
-    log_function_noise = 5.
-    hypertuning_interval = max(2, ho.iterations ÷ 10)
+    log_function_noise = 0.
+    hypertuning_interval = max(9, ho.iterations ÷ 9)
     model = ElasticGPE(ndims, mean = MeanConst(0.),
                        kernel = SEArd(log.(kernel_widths), log_function_noise), logNoise = 0.)
-    modeloptimizer = MLGPOptimizer(every = hypertuning_interval, noisebounds = [-5, 3], # log bounds on the function noise?
+    modeloptimizer = MLGPOptimizer(every = hypertuning_interval, noisebounds = [-5, 0], # log bounds on the function noise?
                                     maxeval = 40) # max iters for optimization of the GP hyperparams
     # opt = BOpt(f, model, ExpectedImprovement(),
     #            modeloptimizer, lower_bounds, upper_bounds,
@@ -202,14 +202,15 @@ function (s::GPSampler)(ho)
         end
     end
 
-    acqfunc = BayesianOptimization.acquisitionfunction(ExpectedImprovement(Int(s.sense)*maximum(ho.results)), s.model)
+    acqfunc = BayesianOptimization.acquisitionfunction(ExpectedImprovement(Int(s.sense)*maximum(s.model.y)), s.model)
     ho2 = Hyperoptimizer(iterations=min(1000, prod(length, s.candidates)), params=ho.params, candidates=s.candidates)
     for params in ho2
         params2 = [params[2:end]...]
         res = -Inf
         try
             res = acqfunc(params2)
-        catch
+        catch ex
+            @warn("BayesianOptimization acqfunc failed at iter $iter: error: ", ex)
         end
         push!(ho2.results, res)
         push!(ho2.history, params2)
