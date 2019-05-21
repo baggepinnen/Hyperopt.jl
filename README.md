@@ -4,13 +4,15 @@
 [![codecov.io](http://codecov.io/github/baggepinnen/Hyperopt.jl/coverage.svg?branch=master)](http://codecov.io/github/baggepinnen/Hyperopt.jl?branch=master)
 
 
-A package to perform hyperparameter optimization. Currently supports random search, [latin hypercube sampling](https://en.wikipedia.org/wiki/Latin_hypercube_sampling), Bayesian optimization and blue-noise search.
+A package to perform hyperparameter optimization. Currently supports random search, [latin hypercube sampling](https://en.wikipedia.org/wiki/Latin_hypercube_sampling), [Bayesian optimization](https://arxiv.org/abs/1807.02811) and blue-noise search.
 
 # Usage
 
 1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below).
 2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])`, `BlueNoiseSampler()` and `GPSampler(Min)/GPSampler(Max)`.
-3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below). Currently uniform random sampling from the candidate values is the only supported optimizer. Log-uniform sampling is achieved with uniform sampling of a logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`. The parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
+3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below).
+4. A useful strategy to achieve log-uniform sampling is logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`.
+5. In the example below, the parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
 
 The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and can be queried for `minimum/maximum`, which returns the best parameters and function value found. It can also be plotted using `plot(ho)` (uses `Plots.jl`).
 
@@ -108,9 +110,9 @@ end
 Caveat for `BlueNoiseSampler`: see below.
 
 # Which sampler to use?
-`RandomSampler` is a good baseline and the default if none is chosen. `GPSampler` fits a Gaussian process to the data and tries to use this model to figure out where the best point to sample next is (using expected improvement). 
+`RandomSampler` is a good baseline and the default if none is chosen. `GPSampler` fits a Gaussian process to the data and tries to use this model to figure out where the best point to sample next is (using expected improvement). This is somewhat expensive and pays off when the function to optimize is expensive.
 
-If number of iterations is small, `BlueNoiseSampler` or `LHSampler` works better than random. Caveat: `BlueNoiseSampler` and `LHSampler` need all candidate vectors to be of equal length, i.e.,
+If number of iterations is small, `BlueNoiseSampler` or `LHSampler` work better than random search. Caveat: `BlueNoiseSampler` and `LHSampler` need all candidate vectors to be of equal length, i.e.,
 ```julia
 hob = @hyperopt for i=100, sampler=BlueNoiseSampler(),
                             a = LinRange(1,5,100),

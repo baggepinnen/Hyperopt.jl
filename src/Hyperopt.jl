@@ -94,7 +94,7 @@ macro phyperopt(ex)
     quote
         function workaround_function()
             ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
-
+            ho.sampler isa GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
             res = pmap(1:ho.iterations) do i
                 $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
                 res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
