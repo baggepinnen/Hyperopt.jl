@@ -4,7 +4,9 @@ author = ["Fredrik Bagge Carlson <baggepinnen@gmail.com>"]
 version = "0.2.2"
 
 [deps]
+BayesianOptimization = "4c6ed407-134f-591c-93fa-e0f7c164a0ec"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+GaussianProcesses = "891a1506-143c-57d2-908e-e1f8e92e6de9"
 Juno = "e5e0dc1b-0480-54bc-9374-aad01c23163d"
 LatinHypercubeSampling = "a5e1c1ea-c99a-51d3-a14d-a9a37257b02d"
 Lazy = "50d2b5c4-7a5e-59d5-8109-a42b560f39c0"
@@ -19,3 +21,5 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [compat]
 LatinHypercubeSampling = "1.2"
 julia = "1.0"
+BayesianOptimization = "0.1.1"
+GaussianProcesses = "0.9.0"
