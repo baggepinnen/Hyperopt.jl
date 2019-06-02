@@ -1,5 +1,5 @@
 
-logscale(params) = /(extrema(params)...) < 2e-2 && minimum(params) > eps(eltype(params))
+logscale(params) = /(extrema(params)...) < 2e-2 && minimum(params) > eps()
 
 @recipe function plot(ho::Hyperoptimizer)
     N = length(ho.params)
