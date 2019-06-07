@@ -9,7 +9,7 @@ A package to perform hyperparameter optimization. Currently supports random sear
 # Usage
 
 1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below).
-2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])`, `BlueNoiseSampler()` and `GPSampler(Min)/GPSampler(Max)`.
+2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])`, `BlueNoiseSampler()`, `Hyperband(R=50, η=3, inner=RandomSampler())` and `GPSampler(Min)/GPSampler(Max)`.
 3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below).
 4. A useful strategy to achieve log-uniform sampling is logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`.
 5. In the example below, the parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
@@ -110,7 +110,7 @@ end
 Caveat for `BlueNoiseSampler`: see below.
 
 # Which sampler to use?
-`RandomSampler` is a good baseline and the default if none is chosen. `GPSampler` fits a Gaussian process to the data and tries to use this model to figure out where the best point to sample next is (using expected improvement). This is somewhat expensive and pays off when the function to optimize is expensive.
+`RandomSampler` is a good baseline and the default if none is chosen. `GPSampler` fits a Gaussian process to the data and tries to use this model to figure out where the best point to sample next is (using expected improvement). This is somewhat expensive and pays off when the function to optimize is expensive. `Hyperband(R=50, η=3, inner=RandomSampler())` runs the expression with varying amount of resources, allocating more resources to promising hyperparameters. See below for more info on `Hyperband`.
 
 If number of iterations is small, `BlueNoiseSampler` or `LHSampler` work better than random search. Caveat: `BlueNoiseSampler` and `LHSampler` need all candidate vectors to be of equal length, i.e.,
 ```julia
@@ -139,6 +139,19 @@ The result of the blue noise optimization in 2 dimensions is visualized below. I
 ![window](bluenoise.png)
 
 If the number of iterations is very large, the optimization problem might take long time to run in comparison to the runtime of a single experiment and random sampling will end up more effective.
+
+## Hyperband
+`Hyperband(R=50, η=3, inner=RandomSampler())` Implements [Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization](https://arxiv.org/abs/1603.06560). The maximum amount of resources is given by `R` and the parameter `η` roughly determines the proportion of trials discarded between each round of successive halving. When using `Hyperband` the expression inside the `@hyperopt` macro takes the following form
+```julia
+ho = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
+    if state === nothing # Query if state is initialized
+        res = optimize(resources=i, a, b) # if state is uninitialized, start a new optimization using the selected hyper parameters
+    else
+        res = optimize(resources=i, state=state) # If state has a value, continue the optimization from the state
+    end
+    minimum(res), get_state(res) # return the minimum value and a state from which to continue the optimization
+end
+```
 
 # Parallel execution
 The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.

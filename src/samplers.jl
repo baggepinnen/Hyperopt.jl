@@ -6,6 +6,9 @@ function (s::RandomSampler)(ho)
     [list[rand(1:length(list))] for list in ho.candidates]
 end
 
+
+# Blue noise ===================================================================
+
 """
 Try to spread out parameters as blue noise (only high frequency). Should sample the space better than random sampling. Use this if you intend to run less than, say, 2000.
 """
@@ -217,4 +220,105 @@ function (s::GPSampler)(ho)
     end
     return from_logspace(ho2.minimizer, s.logdims)
 
+end
+
+
+# Hyperband ====================================================================
+
+"""
+
+"""
+@with_kw mutable struct Hyperband <: Sampler
+    R
+    η::Int = 3
+    minimum = (Inf,)
+    inner = RandomSampler()
+end
+Hyperband(R) = Hyperband(R=R)
+
+function macrobody(ex, params, candidates, sampler::Hyperband)
+    quote
+        iters = $(esc(candidates[1]))
+        if $sampler.inner isa LHSampler
+            smax = floor(Int, log($sampler.η,$sampler.R))
+            B = (smax + 1)*$sampler.R
+            iters = floor(Int,$sampler.R*$sampler.η^smax)
+            ss = string($sampler.inner)
+            @info "Starting Hyperband with inner sampler $(ss). Setting the number of iterations to R*η^log(η,R)=$(iters), make sure all candidate vectors have this length as well!"
+        end
+        ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$sampler)
+
+        costfun = $(Expr(:tuple, esc.(params)...)) -> begin
+            $(esc(:(state = nothing)))
+            $(esc(ex.args[2]))
+        end
+        (::$typeof(costfun))($(esc(params[1])), $(esc(:state))) = $(esc(ex.args[2]))
+        @show methods(costfun)
+        hyperband($sampler, ho, costfun)
+        ho
+    end
+end
+
+function hyperband(hb::Hyperband, ho, costfun)
+    R,η = hb.R, hb.η
+    hb.minimum = (Inf,)
+    smax = floor(Int, log(η,R))
+    B = (smax + 1)*R
+    # ho.iterations >= R*η^smax || error("The number of iterations must be larger than R*η^log(η,R) = $(R*η^smax)")
+    Juno.progress() do id
+        for s in smax:-1:0
+            n = ceil(Int, (B/R)*((η^s)/(s+1)))
+            r = R / (η^s)
+            minᵢ = successive_halving(hb, ho, costfun, n, r, s)
+            if minᵢ[1] < hb.minimum[1]
+                hb.minimum = minᵢ
+            end
+            Base.CoreLogging.@logmsg -1 "Hyperband" progress=(smax-s)+1/(smax+1)  _id=id
+        end
+    end
+    return hb.minimum
+end
+
+
+function successive_halving(hb, ho, costfun, n, r=1, s=round(Int, log(hb.η, n)))
+    η = hb.η
+    minimum = Inf
+    T = [ hb.inner(ho) for i=1:n ]
+    # append!(ho.history, T)
+    Juno.progress() do id
+        for i in 0:s
+            nᵢ = floor(Int,n/(η^i))
+            rᵢ = floor(Int,r*(η^i))
+            if i == 0
+                LTend = [ costfun(rᵢ, t...) for t in T ]
+            else
+                LTend = [ costfun(rᵢ, t) for t in T ]
+            end
+            L, T = first.(LTend), last.(LTend)
+            # if i == 0
+            #     append!(ho.results, L)
+            # else
+            #     for t in eachindex(T) # Update results for those that were continued
+            #         ho.results[findlast(x->x==T[t], ho.history)] = L[t]
+            #     end
+            # end
+            append!(ho.history, T)
+            append!(ho.results, L)
+
+            perm = sortperm(L)
+            besti = perm[1]
+            if L[besti] < minimum[1]
+                minimum = (L[besti], rᵢ, T[besti])
+            end
+            T = T[perm[1:floor(Int,nᵢ/η)]]
+            # T, minimum
+            # T, minimum = top_k(hb,T,L,nᵢ,minimum)
+            Base.CoreLogging.@logmsg -1 "successive_halving" progress=i/s  _id=id
+        end
+    end
+    return minimum
+end
+
+function top_k(hb,T,L,nᵢ,minimum)
+    η = hb.η
 end

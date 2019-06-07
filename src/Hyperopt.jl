@@ -74,10 +74,9 @@ function preprocess_expression(ex)
     params, candidates, sampler_
 end
 
-macro hyperopt(ex)
-    params, candidates, sampler_ = preprocess_expression(ex)
+function macrobody(ex, params, candidates, sampler)
     quote
-        ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
+        ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)))
         Juno.progress() do id
             for $(Expr(:tuple, esc.(params)...)) = ho
                 res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
@@ -89,8 +88,12 @@ macro hyperopt(ex)
     end
 end
 
-macro phyperopt(ex)
+macro hyperopt(ex)
     params, candidates, sampler_ = preprocess_expression(ex)
+    macrobody(ex, params, candidates, eval(sampler_))
+end
+
+function pmacrobody(ex, params, candidates, sampler_)
     quote
         function workaround_function()
             ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
@@ -109,6 +112,11 @@ macro phyperopt(ex)
         end
         workaround_function()
     end
+end
+
+macro phyperopt(ex)
+    params, candidates, sampler_ = preprocess_expression(ex)
+    pmacrobody(ex, params, candidates, sampler_)
 end
 
 function Base.minimum(ho::Hyperoptimizer)

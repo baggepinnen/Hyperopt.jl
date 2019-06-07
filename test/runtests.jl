@@ -102,3 +102,23 @@ end
     @test !Hyperopt.islogspace(LinRange(-3, 3, 10))
     @test !Hyperopt.islogspace([true, false])
 end
+
+
+@testset "Hyperband" begin
+    using Optim
+    f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
+    Hyperopt.Hyperband(10)
+    # res = map(1:30) do i
+    #     @info("Iteration ", i)
+    hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
+        # println(i, "\t", a, "\t", b, "\t", c)
+        # print(i, " ")
+        if !(state === nothing)
+            a,c = state
+        end
+        res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=i))
+        Optim.minimum(res), Optim.minimizer(res)
+    end
+    @test minimum(hohb)[2] < 300
+
+end
