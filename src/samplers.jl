@@ -237,7 +237,6 @@ end
 Hyperband(R) = Hyperband(R=R)
 
 function macrobody(ex, params, candidates, sampler::Hyperband)
-    @show params, candidates
     quote
         iters = $(esc(candidates[1]))
         if $sampler.inner isa LHSampler
@@ -249,7 +248,12 @@ function macrobody(ex, params, candidates, sampler::Hyperband)
         end
         ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$sampler)
 
-        costfun = $(Expr(:tuple, esc.(params)...)) -> $(esc(ex.args[2]))
+        costfun = $(Expr(:tuple, esc.(params)...)) -> begin
+            $(esc(:(state = nothing)))
+            $(esc(ex.args[2]))
+        end
+        (::$typeof(costfun))($(esc(params[1])), $(esc(:state))) = $(esc(ex.args[2]))
+        @show methods(costfun)
         hyperband($sampler, ho, costfun)
         ho
     end
@@ -285,7 +289,11 @@ function successive_halving(hb, ho, costfun, n, r=1, s=round(Int, log(hb.η, n))
         for i in 0:s
             nᵢ = floor(Int,n/(η^i))
             rᵢ = floor(Int,r*(η^i))
-            LTend = [ costfun(rᵢ, t...) for t in T ]
+            if i == 0
+                LTend = [ costfun(rᵢ, t...) for t in T ]
+            else
+                LTend = [ costfun(rᵢ, t) for t in T ]
+            end
             L, T = first.(LTend), last.(LTend)
             # if i == 0
             #     append!(ho.results, L)

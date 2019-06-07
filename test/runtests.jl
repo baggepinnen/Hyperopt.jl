@@ -113,7 +113,9 @@ end
     hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
         # println(i, "\t", a, "\t", b, "\t", c)
         # print(i, " ")
-        @show i
+        if !(state === nothing)
+            a,c = state
+        end
         res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=i))
         Optim.minimum(res), Optim.minimizer(res)
     end

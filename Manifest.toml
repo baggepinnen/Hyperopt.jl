@@ -28,10 +28,10 @@ uuid = "b99e7846-7c00-51b0-8f62-c81ae34c0232"
 version = "0.5.4"
 
 [[CMake]]
-deps = ["BinDeps", "Libdl", "Test"]
-git-tree-sha1 = "6e39bef3cbb8321e8a464b18a5c20d7cef813938"
+deps = ["BinDeps"]
+git-tree-sha1 = "c67a8689dc5444adc5eb2be7d837100340ecba11"
 uuid = "631607c0-34d2-5d66-819e-eb0f9aa2061a"
-version = "1.1.1"
+version = "1.1.2"
 
 [[CMakeWrapper]]
 deps = ["BinDeps", "CMake", "Libdl", "Parameters", "Test"]
@@ -84,10 +84,10 @@ deps = ["Mmap"]
 uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 
 [[DiffEqDiffTools]]
-deps = ["LinearAlgebra", "Test"]
-git-tree-sha1 = "30f82c63cb9d293513b360572e283c19577fcf82"
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "14c4ec4f8796e71ba034f5089b6186876574a49d"
 uuid = "01453d9d-ee7c-5054-8395-0335cb756afa"
-version = "0.8.1"
+version = "0.10.1"
 
 [[DiffResults]]
 deps = ["Compat", "StaticArrays"]
@@ -118,10 +118,9 @@ uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
 version = "0.20.0"
 
 [[ElasticArrays]]
-deps = ["Compat"]
-git-tree-sha1 = "ea538a92534b6466338d00b913bc1adf6dea7588"
+git-tree-sha1 = "d9c079b747b9e9985d83e806bb77e41d149c959a"
 uuid = "fdbdab4c-e67f-52f5-8c3f-e7b388dad3d4"
-version = "0.3.0"
+version = "0.4.0"
 
 [[ElasticPDMats]]
 deps = ["LinearAlgebra", "MacroTools", "PDMats", "Test"]
@@ -341,10 +340,10 @@ uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
 version = "0.7.2"
 
 [[StaticArrays]]
-deps = ["InteractiveUtils", "LinearAlgebra", "Random", "Statistics", "Test"]
-git-tree-sha1 = "3841b39ed5f047db1162627bf5f80a9cd3e39ae2"
+deps = ["LinearAlgebra", "Random", "Statistics"]
+git-tree-sha1 = "db23bbf50064c582b6f2b9b043c8e7e98ea8c0c6"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "0.10.3"
+version = "0.11.0"
 
 [[Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
