@@ -12,13 +12,13 @@ This package was designed to facilitate the addition of optimization logic to al
 
 ## High-level example
 In order to add hyper-parameter optimization to the existing pseudo code
-```
+```julia
 a = manually_selected_value
 b = other_value
 cost = train_model(a,b)
 ```
 we wrap it in `@hyperopt` like this
-```
+```julia
 ho = @hyperopt for i = number_of_samples,
                    a = candidate_values,
                    b = other_candidate_values,
