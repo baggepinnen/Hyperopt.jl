@@ -21,12 +21,13 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [compat]
 BayesianOptimization = "0.1.1"
 GaussianProcesses = "0.9.0"
+Juno = "0.7"
 LatinHypercubeSampling = "1.2"
 julia = "1.0"
 
 [extras]
-Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 
 [targets]
 test = ["Optim", "Plots"]
