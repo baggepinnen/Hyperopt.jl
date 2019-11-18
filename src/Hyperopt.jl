@@ -105,9 +105,6 @@ function pmacrobody(ex, params, candidates, sampler_)
                 res, $(Expr(:tuple, esc.(params[2:end])...))
             end
             append!(ho.results, getindex.(res,1))
-            for r in res
-                push!(ho.history, r[2])
-            end
             ho
         end
         workaround_function()
