@@ -8,6 +8,26 @@ A package to perform hyperparameter optimization. Currently supports random sear
 
 # Usage
 
+This package was designed to facilitate the addition of optimization logic to already existing code. I usually write some code and try a few hyper parameters by hand before I realize I have to take a more structured approach to finding good hyper parameters. I therefore designed this package such that the optimization logic is wrapped around existing code, and the user only has to specify which variables to optimize and candidate values (ranges) for these variables.
+
+## High-level example
+In order to add hyper-parameter optimization to the existing pseudo code
+```
+a = manually_selected_value
+b = other_value
+cost = train_model(a,b)
+```
+we wrap it in `@hyperopt` like this
+```
+ho = @hyperopt for i = number_of_samples,
+                   a = candidate_values,
+                   b = other_candidate_values,
+cost = train_model(a,b)
+end
+```
+
+## Details
+
 1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below).
 2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])`, `BlueNoiseSampler()`, `Hyperband(R=50, η=3, inner=RandomSampler())` and `GPSampler(Min)/GPSampler(Max)`.
 3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below).
@@ -16,6 +36,8 @@ A package to perform hyperparameter optimization. Currently supports random sear
 
 The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and can be queried for `minimum/maximum`, which returns the best parameters and function value found. It can also be plotted using `plot(ho)` (uses `Plots.jl`).
 
+
+## Full example
 ```julia
 using Hyperopt
 
@@ -63,6 +85,14 @@ a = 1.62062
 b = true
 c = 100.694
 ```
+
+We can also visualize the result by plotting the hyperoptimizer
+```
+plot(ho)
+```
+![window](figs/ho.svg)
+
+This may allow us to determine which parameters are most important for the performance etc.
 
 
 The type `Hyperoptimizer` is iterable, it iterates for the specified number of iterations, each iteration providing a sample of the parameter vector, e.g.
