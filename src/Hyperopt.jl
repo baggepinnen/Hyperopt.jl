@@ -105,6 +105,8 @@ function pmacrobody(ex, params, candidates, sampler_)
                 res, $(Expr(:tuple, esc.(params[2:end])...))
             end
             append!(ho.results, getindex.(res,1))
+            empty!(ho.history) # The call to iterate(ho) populates history, but only on host process
+            append!(ho.history, getindex.(res,2))
             ho
         end
         workaround_function()
