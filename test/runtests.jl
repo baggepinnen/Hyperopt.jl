@@ -1,4 +1,4 @@
-using Test, Random
+using Test, Random, Distributed
 Random.seed!(0)
 using Hyperopt, Plots
 
@@ -13,6 +13,11 @@ using Hyperopt, Plots
         f(a,b,c=c)
     end
     @test minimum(hor)[2] < 300
+    @test length(hor.history) == 100
+    @test length(hor.results) == 100
+    @test all(hor.history) do h
+        all(hi in hor.candidates[i] for (i,hi) in enumerate(h))
+    end
 
     horp = @phyperopt for i=100, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
         # println(i, "\t", a, "\t", b, "\t", c)
@@ -20,6 +25,20 @@ using Hyperopt, Plots
         f(a,b,c=c)
     end
     @test minimum(horp)[2] < 300
+    @test length(horp.history) == 100
+    @test length(horp.results) == 100
+
+    addprocs(2)
+    @everywhere using Hyperopt
+    @everywhere f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2)
+    horp = @phyperopt for i=100, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
+        # println(i, "\t", a, "\t", b, "\t", c)
+        # print(i, " ")
+        f(a,b,c=c)
+    end
+    @test minimum(horp)[2] < 300
+    @test length(horp.history) == 100
+    @test length(horp.results) == 100
 
     hob = @hyperopt for i=100, sampler=BlueNoiseSampler(), a = LinRange(1,5,100), b = repeat([true, false],50), c = exp10.(LinRange(-1,3,100))
         # println(i, "\t", a, "\t", b, "\t", c)

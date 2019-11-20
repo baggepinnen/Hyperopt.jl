@@ -253,7 +253,6 @@ function macrobody(ex, params, candidates, sampler::Hyperband)
             $(esc(ex.args[2]))
         end
         (::$typeof(costfun))($(esc(params[1])), $(esc(:state))) = $(esc(ex.args[2]))
-        @show methods(costfun)
         hyperband($sampler, ho, costfun)
         ho
     end
