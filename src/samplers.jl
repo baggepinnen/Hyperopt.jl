@@ -132,7 +132,7 @@ end
 """
 Sample using Bayesian optimization. `GPSampler(Min)/GPSampler(Max)` fits a Gaussian process to the data and tries to use this model to figure out where the best point to sample next is (using expected improvement). Underneath, the package [BayesianOptimization.jl](https://github.com/jbrea/BayesianOptimization.jl/) is used. We try to provide reasonable defaults for the underlying model and optimizer and we do not provide any customization options for this sampler. If you want advanced control, use BayesianOptimization.jl directly.
 """
-@with_kw mutable struct GPSampler <: Sampler
+Base.@kwdef mutable struct GPSampler <: Sampler
     sense
     model = nothing
     # opt = nothing
@@ -140,7 +140,7 @@ Sample using Bayesian optimization. `GPSampler(Min)/GPSampler(Max)` fits a Gauss
     logdims = nothing
     candidates = nothing
 end
-GPSampler() = error("The GPSampler needs to know if you want to maximize or minimize. Choose between `GPSampler(Max)/GPSampler(Min)`")
+
 GPSampler(sense) = GPSampler(sense=sense)
 
 function islogspace(x)
@@ -174,7 +174,8 @@ function init!(s::GPSampler, ho)
     hypertuning_interval = max(9, ho.iterations ÷ 9)
     model = ElasticGPE(ndims, mean = MeanConst(0.),
                        kernel = SEArd(log.(kernel_widths), log_function_noise), logNoise = 0.)
-    modeloptimizer = MLGPOptimizer(every = hypertuning_interval, noisebounds = [-5, 0], # log bounds on the function noise?
+
+    modeloptimizer = MAPGPOptimizer(every = hypertuning_interval, noisebounds = [-5, 0], # log bounds on the function noise?
                                     maxeval = 40) # max iters for optimization of the GP hyperparams
     # opt = BOpt(f, model, ExpectedImprovement(),
     #            modeloptimizer, lower_bounds, upper_bounds,
