@@ -66,16 +66,17 @@ end
 """
 Sample using Bayesian optimization. `GPSampler(Min)/GPSampler(Max)` fits a Gaussian process to the data and tries to use this model to figure out where the best point to sample next is (using expected improvement). Underneath, the package [BayesianOptimization.jl](https://github.com/jbrea/BayesianOptimization.jl/) is used. We try to provide reasonable defaults for the underlying model and optimizer and we do not provide any customization options for this sampler. If you want advanced control, use BayesianOptimization.jl directly.
 """
-Base.@kwdef mutable struct GPSampler <: Sampler
+mutable struct GPSampler <: Sampler
     sense
-    model = nothing
-    # opt = nothing
-    modeloptimizer = nothing
-    logdims = nothing
-    candidates = nothing
+    model
+    # opt
+    modeloptimizer
+    logdims
+    candidates
 end
 
-GPSampler(sense) = GPSampler(sense=sense)
+GPSampler() = error("You must specify GPSampler(Min)/GPSampler(Max) for minimization or maximization.")
+GPSampler(sense) = GPSampler(sense,nothing,nothing,nothing,nothing)
 
 function islogspace(x)
     all(x->x > 0, x) || return false
@@ -128,7 +129,7 @@ end
 function (s::GPSampler)(ho)
     init!(s, ho)
     iter = length(ho.history)+1
-    if iter == 1
+    if iter <= 3
         return [rand(list) for (dim,list) in enumerate(ho.candidates)]
     else
         input = reshape(to_logspace(float.(ho.history[end]), s.logdims), :, 1)
@@ -141,7 +142,7 @@ function (s::GPSampler)(ho)
     end
 
     acqfunc = BayesianOptimization.acquisitionfunction(ExpectedImprovement(Int(s.sense)*maximum(s.model.y)), s.model)
-    ho2 = Hyperoptimizer(iterations=min(1000, prod(length, s.candidates)), params=ho.params, candidates=s.candidates)
+    ho2 = Hyperoptimizer(iterations=min(20, prod(length, s.candidates)), params=ho.params, candidates=s.candidates)
     for params in ho2
         params2 = [params[2:end]...]
         res = -Inf
