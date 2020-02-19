@@ -21,6 +21,9 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @test all(hor.history) do h
             all(hi in hor.candidates[i] for (i,hi) in enumerate(h))
         end
+
+        printmax(hor)
+        printmin(hor)
     end
 
     @testset "Latin hypercube" begin
@@ -63,6 +66,13 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         end
         minimum(hogp)[2]
 
+        plot(hogp.sampler)
+        plot(hogp)
+
+        # One dimension case
+        hogp = @hyperopt for i=50, sampler=GPSampler(Min), a = LinRange(1,5,100)
+            a
+        end
         plot(hogp.sampler)
         plot(hogp)
 
