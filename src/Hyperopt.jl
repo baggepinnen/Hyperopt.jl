@@ -32,13 +32,13 @@ end
 
 include("samplers.jl")
 
-function Hyperoptimizer(iterations::Int; kwargs...)
+function Hyperoptimizer(iterations::Int, sampler::Sampler = RandomSampler(); kwargs...)
     params = keys(kwargs)
     candidates = []
     for kw in kwargs
         push!(candidates, kw[2])
     end
-    Hyperoptimizer(iterations=iterations, params=params, candidates=candidates)
+    Hyperoptimizer(iterations=iterations, params=params, candidates=candidates, sampler=sampler)
 end
 
 Lazy.@forward Hyperoptimizer.history Base.length, Base.getindex
