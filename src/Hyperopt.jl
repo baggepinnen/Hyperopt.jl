@@ -1,7 +1,7 @@
 module Hyperopt
 
 export Hyperoptimizer, @hyperopt, @phyperopt, printmin, printmax
-export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, Continuous, Categorical, GPSampler, Max, Min
+export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, Continuous, Categorical, GPSampler, Max, Min, Hyperband
 
 using LinearAlgebra, Statistics
 using Juno
