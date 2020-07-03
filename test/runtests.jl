@@ -58,7 +58,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @show mean(results .< 300)
 
         @test mean(results) < 300
-        @test mean(results .< 300) > 0.8
+        @test mean(results .< 300) >= 0.8
 
 
         hogp = @hyperopt for i=50, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
@@ -133,7 +133,6 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
     @testset "Hyperband" begin
         using Optim
         f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
-        Hyperopt.Hyperband(10)
         # res = map(1:30) do i
         #     @info("Iteration ", i)
         hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))

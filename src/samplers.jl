@@ -1,4 +1,4 @@
-"""
+    """
 Sample a value For each parameter uniformly at random from the candidate vectors. Log-uniform sampling available by providing a log-spaced candidate vector.
 """
 struct RandomSampler <: Sampler end
@@ -98,33 +98,27 @@ end
 
 function init!(s::GPSampler, ho)
     s.model === nothing || return # Already initialized
-    ndims = length(ho.candidates)
-    logdims = islogspace.(ho.candidates)
-    candidates = to_logspace(ho.candidates, logdims)
-    lower_bounds = [minimum.(candidates)...]
-    upper_bounds = [maximum.(candidates)...]
-    widths = upper_bounds - lower_bounds
-    kernel_widths = widths/10
-    log_function_noise = 0.
+    ndims                = length(ho.candidates)
+    logdims              = islogspace.(ho.candidates)
+    candidates           = to_logspace(ho.candidates, logdims)
+    lower_bounds         = [minimum.(candidates)...]
+    upper_bounds         = [maximum.(candidates)...]
+    widths               = upper_bounds - lower_bounds
+    kernel_widths        = widths/10
+    log_function_noise   = 0.
     hypertuning_interval = max(9, ho.iterations ÷ 9)
     model = ElasticGPE(ndims, mean = MeanConst(0.),
                        kernel = SEArd(log.(kernel_widths), log_function_noise), logNoise = 0.)
 
     modeloptimizer = MAPGPOptimizer(every = hypertuning_interval, noisebounds = [-5, 0], # log bounds on the function noise?
                                     maxeval = 40) # max iters for optimization of the GP hyperparams
-    # opt = BOpt(f, model, ExpectedImprovement(),
-    #            modeloptimizer, lower_bounds, upper_bounds,
-    #            maxiterations = ho.iterations, sense = Min, repetitions = 1,
-    #            acquisitionoptions = (maxeval = 4000, restarts = 50),
-    #            verbosity = Progress)
-    # result = boptimize!(opt)
 
-    # s.opt = opt
     s.model = model
     s.modeloptimizer = modeloptimizer
     s.logdims = logdims
     s.candidates = candidates
 end
+
 
 function (s::GPSampler)(ho)
     init!(s, ho)
@@ -135,16 +129,24 @@ function (s::GPSampler)(ho)
         input = reshape(to_logspace(float.(ho.history[end]), s.logdims), :, 1)
         try
             BayesianOptimization.update!(s.model, input, [Int(s.sense)*ho.results[end]])
-            BayesianOptimization.optimizemodel!(s.modeloptimizer, s.model) # This determines whether to run or not internally?
+            if iter >= 9
+                BayesianOptimization.optimizemodel!(s.modeloptimizer, s.model) # This determines whether to run or not internally?
+            end
         catch ex
             @warn("BayesianOptimization failed at iter $iter: error: ", ex)
         end
     end
 
-    acqfunc = BayesianOptimization.acquisitionfunction(ExpectedImprovement(Int(s.sense)*maximum(s.model.y)), s.model)
-    ho2 = Hyperoptimizer(iterations=min(20, prod(length, s.candidates)), params=ho.params, candidates=s.candidates)
+    # We now optimize the acq function using the random sampler. This could potentially be improved upon
+    acqfunc = BayesianOptimization.acquisitionfunction(ExpectedImprovement(maximum(s.model.y)), s.model)
+    # plot(s) |> display
+    # plot!(x->acqfunc([x]), 1, 5, sp=2)
+    # sleep(0.2)
+    iters = min(30, prod(length, s.candidates))
+    # iters = 3000
+    ho2 = Hyperoptimizer(iterations=iters, params=ho.params, candidates=s.candidates)
     for params in ho2
-        params2 = [params[2:end]...]
+        params2 = params[2:end]
         res = -Inf
         try
             res = acqfunc(params2)
@@ -152,9 +154,15 @@ function (s::GPSampler)(ho)
             @warn("BayesianOptimization acqfunc failed at iter $iter: error: ", ex)
         end
         push!(ho2.results, res)
-        push!(ho2.history, params2)
+        # push!(ho2.history, params2)
     end
-    return from_logspace(ho2.minimizer, s.logdims)
+
+    # @show ho2.maximizer
+    # xpl = reduce(vcat,ho2.history)
+    # @show length(xpl)
+    # scatter!(xpl, zeros(3000), sp=2) |> display
+
+    return from_logspace(ho2.maximizer, s.logdims)
 
 end
 
@@ -172,24 +180,24 @@ end
 end
 Hyperband(R) = Hyperband(R=R)
 
-function macrobody(ex, params, candidates, sampler::Hyperband)
+function macrobody_hyperband(ex, params, candidates, sampler)
     quote
         iters = $(esc(candidates[1]))
-        if $sampler.inner isa LHSampler
-            smax = floor(Int, log($sampler.η,$sampler.R))
-            B = (smax + 1)*$sampler.R
-            iters = floor(Int,$sampler.R*$sampler.η^smax)
-            ss = string($sampler.inner)
+        if $(esc(sampler)).inner isa LHSampler
+            smax = floor(Int, log($(esc(sampler)).η,$(esc(sampler)).R))
+            B = (smax + 1)*$(esc(sampler)).R
+            iters = floor(Int,$(esc(sampler)).R*$(esc(sampler)).η^smax)
+            ss = string($(esc(sampler)).inner)
             @info "Starting Hyperband with inner sampler $(ss). Setting the number of iterations to R*η^log(η,R)=$(iters), make sure all candidate vectors have this length as well!"
         end
-        ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$sampler)
+        ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)))
 
         costfun = $(Expr(:tuple, esc.(params)...)) -> begin
             $(esc(:(state = nothing)))
             $(esc(ex.args[2]))
         end
         (::$typeof(costfun))($(esc(params[1])), $(esc(:state))) = $(esc(ex.args[2]))
-        hyperband($sampler, ho, costfun)
+        hyperband($(esc(sampler)), ho, costfun)
         ho
     end
 end

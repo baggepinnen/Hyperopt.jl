@@ -1,7 +1,7 @@
 name = "Hyperopt"
 uuid = "93e5fe13-2215-51db-baaf-2e9a34fb2712"
 author = ["Fredrik Bagge Carlson <baggepinnen@gmail.com>"]
-version = "0.3.2"
+version = "0.3.3"
 
 [deps]
 BayesianOptimization = "4c6ed407-134f-591c-93fa-e0f7c164a0ec"
@@ -20,7 +20,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 BayesianOptimization = "0.2"
-GaussianProcesses = "0.9, 0.11"
+GaussianProcesses = "0.12"
 Juno = "0.7, 0.8"
 LatinHypercubeSampling = "1.2"
 Lazy = "0.13, 0.14, 0.15"

@@ -27,6 +27,8 @@ end
 function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
     s == :minimum && (return minimum(replace(ho.results, NaN => Inf)))
     s == :minimizer && (return minimum(ho)[1])
+    s == :maximum && (return maximum(replace(ho.results, NaN => Inf)))
+    s == :maximizer && (return maximum(ho)[1])
     return getfield(ho,s)
 end
 
@@ -75,6 +77,9 @@ function preprocess_expression(ex)
 end
 
 function macrobody(ex, params, candidates, sampler)
+    if sampler.args[1] === :Hyperband
+        return macrobody_hyperband(ex, params, candidates, sampler)
+    end
     quote
         ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)))
         Juno.progress() do id
@@ -90,7 +95,7 @@ end
 
 macro hyperopt(ex)
     params, candidates, sampler_ = preprocess_expression(ex)
-    macrobody(ex, params, candidates, eval(sampler_))
+    macrobody(ex, params, candidates, sampler_)
 end
 
 function pmacrobody(ex, params, candidates, sampler_)
@@ -123,7 +128,7 @@ function Base.minimum(ho::Hyperoptimizer)
     ho.history[i], m
 end
 function Base.maximum(ho::Hyperoptimizer)
-    m,i = findmax(replace(ho.results, NaN => Inf))
+    m,i = findmax(replace(ho.results, NaN => -Inf))
     ho.history[i], m
 end
 
