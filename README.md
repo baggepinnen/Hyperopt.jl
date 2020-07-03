@@ -180,7 +180,6 @@ a working example using `Hyperband` is
 ```julia
 using Optim
 f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
-Hyperopt.Hyperband(10)
 hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
     if !(state === nothing)
         a,c = state
