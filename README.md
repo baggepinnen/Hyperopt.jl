@@ -176,6 +176,20 @@ ho = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a
     minimum(res), get_state(res) # return the minimum value and a state from which to continue the optimization
 end
 ```
+a working example using `Hyperband` is
+```julia
+using Optim
+f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
+Hyperopt.Hyperband(10)
+hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
+    if !(state === nothing)
+        a,c = state
+    end
+    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=i))
+    Optim.minimum(res), Optim.minimizer(res)
+end
+plot(hohb)
+```
 
 # Parallel execution
 The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.
