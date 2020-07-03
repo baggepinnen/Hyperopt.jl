@@ -46,6 +46,8 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
     @testset "GP sampler" begin
         @info "Testing GP sampler"
 
+        @test_throws ErrorException GPSampler()
+
         results = map(1:20) do _
             hogp = @hyperopt for i=50, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
                 # println(i, "\t", a, "\t", b, "\t", c)
@@ -141,6 +143,18 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
                 a,c = state
             end
             res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=i))
+            Optim.minimum(res), Optim.minimizer(res)
+        end
+        @test minimum(hohb)[2] < 300
+
+
+        # Special logic for the LHsampler as inner
+        hohb = @hyperopt for i=18, sampler=Hyperband(R=30, η=10, inner=LHSampler()), a = LinRange(1,5,300), c = exp10.(LinRange(-1,3,300))
+            # println(i, "\t", a, "\t", b, "\t", c)
+            if !(state === nothing)
+                a,c = state
+            end
+            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=100i))
             Optim.minimum(res), Optim.minimizer(res)
         end
         @test minimum(hohb)[2] < 300
