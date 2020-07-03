@@ -7,10 +7,10 @@ logscale(params) = /(extrema(params)...) < 2e-2 && minimum(params) > eps()
     for i = 1:N
         params = getindex.(ho.history, i)
         perm = sortperm(params)
-        ylabel --> "Function value"
+        yguide --> "Function value"
         seriestype --> :scatter
         @series begin
-            xlabel --> ho.params[i]
+            xguide --> ho.params[i]
             subplot --> i
             label --> "Sampled points"
             legend --> false
