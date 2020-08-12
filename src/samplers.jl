@@ -2,7 +2,10 @@
 Sample a value For each parameter uniformly at random from the candidate vectors. Log-uniform sampling available by providing a log-spaced candidate vector.
 """
 struct RandomSampler <: Sampler end
-function (s::RandomSampler)(ho)
+
+function init!(::RandomSampler, ho) end
+
+function (s::RandomSampler)(ho, iter)
     [list[rand(1:length(list))] for list in ho.candidates]
 end
 
@@ -26,9 +29,8 @@ function init!(s::LHSampler, ho)
     s.samples = copy(X')
 end
 
-function (s::LHSampler)(ho)
+function (s::LHSampler)(ho, iter)
     init!(s, ho)
-    iter = length(ho.history)+1
     [list[s.samples[dim,iter]] for (dim,list) in enumerate(ho.candidates)]
 end
 
@@ -51,9 +53,8 @@ function init!(s::CLHSampler, ho)
     s.samples = copy(X')
 end
 
-function (s::CLHSampler)(ho)
+function (s::CLHSampler)(ho, iter)
     init!(s, ho)
-    iter = length(ho.history)+1
     [list[s.samples[dim,iter]] for (dim,list) in enumerate(ho.candidates)]
 end
 
@@ -120,7 +121,7 @@ function init!(s::GPSampler, ho)
 end
 
 
-function (s::GPSampler)(ho)
+function (s::GPSampler)(ho, iter)
     init!(s, ho)
     iter = length(ho.history)+1
     if iter <= 3
@@ -226,7 +227,7 @@ end
 function successive_halving(hb, ho, costfun, n, r=1, s=round(Int, log(hb.η, n)))
     η = hb.η
     minimum = Inf
-    T = [ hb.inner(ho) for i=1:n ]
+    T = [ hb.inner(ho, i) for i=1:n ]
     # append!(ho.history, T)
     Juno.progress() do id
         for i in 0:s
