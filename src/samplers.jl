@@ -147,7 +147,7 @@ function (s::GPSampler)(ho, iter)
     # iters = 3000
     ho2 = Hyperoptimizer(iterations=iters, params=ho.params, candidates=s.candidates)
     for params in ho2
-        params2 = params[2:end]
+        params2 = collect(params)[2:end]
         res = -Inf
         try
             res = acqfunc(params2)

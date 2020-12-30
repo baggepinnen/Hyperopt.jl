@@ -111,6 +111,11 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             println(i, "\t", a, "\t", b, "\t", c)
         end
 
+        ho = Hyperoptimizer(10, a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
+        for vals in ho
+            println(vals.i, "\t", vals.a, "\t", vals.b, "\t", vals.c)
+        end
+
     end
 
 
