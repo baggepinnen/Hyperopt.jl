@@ -1,6 +1,6 @@
 # Hyperopt
 
-[![Build Status](https://travis-ci.org/baggepinnen/Hyperopt.jl.svg?branch=master)](https://travis-ci.org/baggepinnen/Hyperopt.jl)
+[![Build Status](https://github.com/baggepinnen/Hyperopt.jl/workflows/CI/badge.svg)](https://github.com/baggepinnen/Hyperopt.jl/actions)
 [![codecov.io](http://codecov.io/github/baggepinnen/Hyperopt.jl/coverage.svg?branch=master)](http://codecov.io/github/baggepinnen/Hyperopt.jl?branch=master)
 
 
