@@ -48,8 +48,12 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
 
         @test_throws ErrorException GPSampler()
 
+        foreach(Hyperopt.HO_RNG) do rng
+            Random.seed!(rng, 0)
+        end
+
         results = map(1:20) do _
-            hogp = @hyperopt for i=50, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
+            hogp = @hyperopt for i=60, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
                 # println(i, "\t", a, "\t", b, "\t", c)
                 f(a,Bool(b),c=c)
             end

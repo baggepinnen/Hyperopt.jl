@@ -3,7 +3,8 @@ module Hyperopt
 export Hyperoptimizer, @hyperopt, @phyperopt, printmin, printmax
 export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, Continuous, Categorical, GPSampler, Max, Min, Hyperband
 
-using LinearAlgebra, Statistics
+using Base.Threads: threadid, nthreads
+using LinearAlgebra, Statistics, Random
 using Juno
 using MacroTools
 using MacroTools: postwalk, prewalk
@@ -12,6 +13,8 @@ using RecipesBase
 using Distributed
 using LatinHypercubeSampling
 using BayesianOptimization, GaussianProcesses
+
+const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
 
 abstract type Sampler end
 @with_kw struct Hyperoptimizer

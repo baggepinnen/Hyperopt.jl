@@ -6,7 +6,7 @@ struct RandomSampler <: Sampler end
 function init!(::RandomSampler, ho) end
 
 function (s::RandomSampler)(ho, iter)
-    [list[rand(1:length(list))] for list in ho.candidates]
+    [list[rand(HO_RNG[threadid()], 1:length(list))] for list in ho.candidates]
 end
 
 
@@ -125,7 +125,7 @@ function (s::GPSampler)(ho, iter)
     init!(s, ho)
     iter = length(ho.history)+1
     if iter <= 3
-        return [rand(list) for (dim,list) in enumerate(ho.candidates)]
+        return [rand(HO_RNG[threadid()], list) for (dim,list) in enumerate(ho.candidates)]
     else
         input = reshape(to_logspace(float.(ho.history[end]), s.logdims), :, 1)
         try
