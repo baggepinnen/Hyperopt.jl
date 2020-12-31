@@ -15,7 +15,7 @@ end
 """
 Sample from a latin hypercube
 """
-@with_kw mutable struct LHSampler <: Sampler
+Base.@kwdef mutable struct LHSampler <: Sampler
     samples = zeros(0,0)
     iters = -1
 end
@@ -38,7 +38,7 @@ end
     CLHSampler(dims=[Continuous(), Categorical(2), ...])
 Sample from a categorical/continuous latin hypercube. All continuous variables must have the same length of the candidate vectors.
 """
-@with_kw mutable struct CLHSampler <: Sampler
+Base.@kwdef mutable struct CLHSampler <: Sampler
     samples = zeros(0,0)
     dims = []
 end
@@ -173,7 +173,7 @@ end
 """
 
 """
-@with_kw mutable struct Hyperband <: Sampler
+Base.@kwdef mutable struct Hyperband <: Sampler
     R
     η::Int = 3
     minimum = (Inf,)

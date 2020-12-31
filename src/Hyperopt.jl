@@ -8,7 +8,6 @@ using LinearAlgebra, Statistics, Random
 using Juno
 using MacroTools
 using MacroTools: postwalk, prewalk
-using Parameters
 using RecipesBase
 using Distributed
 using LatinHypercubeSampling
