@@ -55,7 +55,7 @@ function Base.iterate(ho::Hyperoptimizer, state=1)
     state > ho.iterations && return nothing
     samples = ho.sampler(ho, state)
     push!(ho.history, samples)
-    nt = (; Pair.([:i, ho.params...], [state; samples])...)
+    nt = (; Pair.((:i, ho.params...), (state, samples...))...)
     nt, state+1
 end
 
