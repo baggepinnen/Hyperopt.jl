@@ -31,6 +31,8 @@ function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
     return getfield(ho,s)
 end
 
+Base.propertynames(ho::Hyperoptimizer) = (:minimum, :minimizer, :maximum, :maximizer, fieldnames(Hyperoptimizer)...)
+
 include("samplers.jl")
 
 function Hyperoptimizer(iterations::Int, sampler::Sampler = RandomSampler(); kwargs...)
