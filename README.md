@@ -34,7 +34,7 @@ end
 4. A useful strategy to achieve log-uniform sampling is logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`.
 5. In the example below, the parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
 
-The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and can be queried for `minimum/maximum`, which returns the best parameters and function value found. It can also be plotted using `plot(ho)` (uses `Plots.jl`). The exact syntax to use for various samplers is shown in the [testfile](https://github.com/baggepinnen/Hyperopt.jl/blob/master/test/runtests.jl), which should be fairly readable.
+The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and has `minimum/minimizer` and `maximum/maximizer` properties (e.g., `ho.minimizer`). It can also be plotted using `plot(ho)` (uses `Plots.jl`). The exact syntax to use for various samplers is shown in the [testfile](https://github.com/baggepinnen/Hyperopt.jl/blob/master/test/runtests.jl), which should be fairly readable.
 
 
 ## Full example
@@ -77,7 +77,7 @@ Hyperopt.Hyperoptimizer
   sampler: Hyperopt.RandomSampler
 
 
-julia> best_params, min_f = minimum(ho)
+julia> best_params, min_f = ho.minimizer, ho.minimum
 (Real[1.62062, true, 100.694], 112.38413353985818)
 
 julia> printmin(ho)

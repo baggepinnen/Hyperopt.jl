@@ -17,7 +17,7 @@ using BayesianOptimization, GaussianProcesses
 const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
 
 abstract type Sampler end
-@with_kw struct Hyperoptimizer
+Base.@kwdef struct Hyperoptimizer
     iterations::Int
     params
     candidates
@@ -28,9 +28,9 @@ end
 
 function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
     s === :minimum && (return minimum(replace(ho.results, NaN => Inf)))
-    s === :minimizer && (return minimum(ho)[1])
+    s === :minimizer && (return ho.history[argmin(ho.results)])
     s === :maximum && (return maximum(replace(ho.results, NaN => Inf)))
-    s === :maximizer && (return maximum(ho)[1])
+    s === :maximizer && (return ho.history[argmax(ho.results)])
     return getfield(ho,s)
 end
 
@@ -133,23 +133,21 @@ end
 
 function Base.minimum(ho::Hyperoptimizer)
     m,i = findmin(replace(ho.results, NaN => Inf))
-    ho.history[i], m
+    m
 end
 function Base.maximum(ho::Hyperoptimizer)
     m,i = findmax(replace(ho.results, NaN => -Inf))
-    ho.history[i], m
+    m
 end
 
 function printmin(ho::Hyperoptimizer)
-    m,i = minimum(ho)
-    for (param, value) in zip(ho.params, m)
+    for (param, value) in zip(ho.params, ho.minimizer)
         println(param, " = ", value)
     end
 end
 
 function printmax(ho::Hyperoptimizer)
-    m,i = maximum(ho)
-    for (param, value) in zip(ho.params, m)
+    for (param, value) in zip(ho.params, ho.maximizer)
         println(param, " = ", value)
     end
 end

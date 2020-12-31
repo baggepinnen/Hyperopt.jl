@@ -15,7 +15,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
-        @test minimum(hor)[2] < 300
+        @test minimum(hor) < 300
         @test length(hor.history) == 100
         @test length(hor.results) == 100
         @test all(hor.history) do h
@@ -32,14 +32,14 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
-        @test minimum(hol)[2] < 300
+        @test minimum(hol) < 300
 
 
         hocl = @hyperopt for i=100, sampler=CLHSampler(dims=[Continuous(),Categorical(2),Continuous()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
-        @test minimum(hocl)[2] < 300
+        @test minimum(hocl) < 300
 
     end
 
@@ -57,7 +57,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
                 # println(i, "\t", a, "\t", b, "\t", c)
                 f(a,Bool(b),c=c)
             end
-            minimum(hogp)[2]
+            minimum(hogp)
         end
 
         @show mean(results)
@@ -70,7 +70,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         hogp = @hyperopt for i=50, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
             f(a,Bool(b),c=c)
         end
-        minimum(hogp)[2]
+        minimum(hogp)
 
         plot(hogp.sampler)
         plot(hogp)
@@ -157,7 +157,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=i))
             Optim.minimum(res), Optim.minimizer(res)
         end
-        @test minimum(hohb)[2] < 300
+        @test minimum(hohb) < 300
 
 
         # Special logic for the LHsampler as inner
@@ -169,7 +169,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=100i))
             Optim.minimum(res), Optim.minimizer(res)
         end
-        @test minimum(hohb)[2] < 300
+        @test minimum(hohb) < 300
 
     end
 
@@ -180,7 +180,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
-        @test minimum(horp)[2] < 300
+        @test minimum(horp) < 300
         @test length(horp.history) == 100
         @test length(horp.results) == 100
 
@@ -191,7 +191,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
-        @test minimum(horp)[2] < 300
+        @test minimum(horp) < 300
         @test length(horp.history) == 100
         @test length(horp.results) == 100
 
