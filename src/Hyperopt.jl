@@ -5,7 +5,6 @@ export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, Continuous, Categ
 
 using LinearAlgebra, Statistics
 using Juno
-using Lazy
 using MacroTools
 using MacroTools: postwalk, prewalk
 using Parameters
@@ -25,10 +24,10 @@ abstract type Sampler end
 end
 
 function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
-    s == :minimum && (return minimum(replace(ho.results, NaN => Inf)))
-    s == :minimizer && (return minimum(ho)[1])
-    s == :maximum && (return maximum(replace(ho.results, NaN => Inf)))
-    s == :maximizer && (return maximum(ho)[1])
+    s === :minimum && (return minimum(replace(ho.results, NaN => Inf)))
+    s === :minimizer && (return minimum(ho)[1])
+    s === :maximum && (return maximum(replace(ho.results, NaN => Inf)))
+    s === :maximizer && (return maximum(ho)[1])
     return getfield(ho,s)
 end
 
@@ -43,7 +42,9 @@ function Hyperoptimizer(iterations::Int, sampler::Sampler = RandomSampler(); kwa
     Hyperoptimizer(iterations=iterations, params=params, candidates=candidates, sampler=sampler)
 end
 
-Lazy.@forward Hyperoptimizer.history Base.length, Base.getindex
+Base.getindex(ho::Hyperoptimizer, i...) = getindex(ho.history, i...)
+
+Base.length(ho::Hyperoptimizer) = ho.iterations
 
 
 function Base.iterate(ho::Hyperoptimizer, state=1)

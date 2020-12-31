@@ -116,6 +116,9 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             println(vals.i, "\t", vals.a, "\t", vals.b, "\t", vals.c)
         end
 
+        @test length(collect(ho) ) == 10
+        @test length([a for a ∈ ho]) == 10
+
     end
 
 
