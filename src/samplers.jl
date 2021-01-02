@@ -163,7 +163,7 @@ function (s::GPSampler)(ho, iter)
                 acqfunc = BayesianOptimization.acquisitionfunction(ExpectedImprovement(maximum(s.model.y)), s.model)
             end
         catch ex
-            @warn("BayesianOptimization acqfunc failed at iter $iter: error: ", ex)
+            @warn("BayesianOptimization acqfunc failed at iter $iter: error: ", ex, maxlog=1)
         end
         push!(ho2.results, res)
         # push!(ho2.history, params2)
