@@ -163,12 +163,12 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
         # res = map(1:30) do i
         #     @info("Iteration ", i)
-        hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
+        hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
             # println(i, "\t", a, "\t", b, "\t", c)
             if !(state === nothing)
                 a,c = state
             end
-            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=i))
+            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
             Optim.minimum(res), Optim.minimizer(res)
         end
         @test minimum(hohb) < 300
@@ -180,10 +180,25 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             if !(state === nothing)
                 a,c = state
             end
-            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=100i))
+            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=100i))
             Optim.minimum(res), Optim.minimizer(res)
         end
         @test minimum(hohb) < 300
+
+
+        # extra robust option
+
+        hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
+            algorithm = [SimulatedAnnealing(), ParticleSwarm(), NelderMead(), BFGS(), NewtonTrustRegion()],
+            a = LinRange(1,5,1800),
+            c = exp10.(LinRange(-1,3,1800))
+            if !(state === nothing)
+                a,c,algorithm = state
+            end
+            println(i, " algorithm: ", typeof(algorithm))
+            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], algorithm, Optim.Options(time_limit=2i+2, show_trace=false, show_every=5))
+            Optim.minimum(res), (Optim.minimizer(res)..., algorithm)
+        end
 
     end
 

@@ -175,7 +175,7 @@ ho = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a
     minimum(res), get_state(res) # return the minimum value and a state from which to continue the optimization
 end
 ```
-a working example using `Hyperband` is
+a (simple) working example using `Hyperband` and Optim is
 ```julia
 using Optim
 f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
@@ -187,6 +187,22 @@ hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
     Optim.minimum(res), Optim.minimizer(res)
 end
 plot(hohb)
+```
+and a more complicated example that also explores different Optim optimizers as the inner optimizer is
+```julia
+hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
+    algorithm = [SimulatedAnnealing(), ParticleSwarm(), NelderMead(), BFGS(), NewtonTrustRegion()],
+    a = LinRange(1,5,1800),
+    c = exp10.(LinRange(-1,3,1800))
+    if !(state === nothing)
+        x0,algorithm = state
+    else
+        x0 = [a,c]
+    end
+    println(i, " algorithm: ", typeof(algorithm).name.name)
+    res = Optim.optimize(x->f(x[1],c=x[2]), x0, algorithm, Optim.Options(time_limit=i+1, show_trace=false))
+    Optim.minimum(res), (Optim.minimizer(res), algorithm)
+end
 ```
 
 # Parallel execution
