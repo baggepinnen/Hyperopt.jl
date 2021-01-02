@@ -130,27 +130,33 @@ function train_model!(s, ho)
 end
 
 
-function (s::GPSampler)(ho, iter)
+function Base.iterate(ho::Hyperoptimizer{<:GPSampler}, iter=1)
+    iter > ho.iterations && return nothing
+    s = ho.sampler
     init!(s, ho)
-    iter = length(ho.history)+1
-    th = max(3, length(ho.candidates))
+    th = max(4, length(ho.candidates)+1)
     if iter <= th
-        return [rand(HO_RNG[threadid()], list) for (dim,list) in enumerate(ho.candidates)]
+        samples = [rand(HO_RNG[threadid()], list) for (dim,list) in enumerate(ho.candidates)]
+        nt = (; Pair.((:i, ho.params...), (iter, samples...))...)
+        # res = ho.objective(iter, samples...)
+        # push!(ho.results, res)
+        push!(ho.history, samples)
+        return nt, iter+1
     else
         try
             train_model!(s, ho)
         catch ex
-            @warn("BayesianOptimization failed with optimizemodel! at iter $iter: error: ", ex)
+            @warn("BayesianOptimization failed with optimizemodel! at iter $iter: error: ", ex, maxlog=1)
         end
     end
 
     # We now optimize the acq function using the random sampler. This could potentially be improved upon
+    @assert length(s.model.y) >= th "Hyperoptimizer does not contain enough stored samples. If you iterate the optimizer manually, do not forget to push the results to the internal storage, see https://github.com/baggepinnen/Hyperopt.jl#full-example for an example."
     acqfunc = BayesianOptimization.acquisitionfunction(ExpectedImprovement(maximum(s.model.y)), s.model)
     # plot(s) |> display
     # plot!(x->acqfunc([x]), 1, 5, sp=2)
     # sleep(0.2)
-    iters = min(70, prod(length, s.candidates))
-    # iters = 3000
+    iters = min(80, prod(length, s.candidates))
     ho2 = Hyperoptimizer(iterations=iters, params=ho.params, candidates=s.candidates, objective=acqfunc)
     for params in ho2
         params2 = collect(params)[2:end]
@@ -166,7 +172,6 @@ function (s::GPSampler)(ho, iter)
             @warn("BayesianOptimization acqfunc failed at iter $iter: error: ", ex, maxlog=1)
         end
         push!(ho2.results, res)
-        # push!(ho2.history, params2)
     end
 
     # @show ho2.maximizer
@@ -174,8 +179,11 @@ function (s::GPSampler)(ho, iter)
     # @show length(xpl)
     # scatter!(xpl, zeros(3000), sp=2) |> display
 
-    return from_logspace(ho2.maximizer, s.logdims)
-
+    samples = from_logspace(ho2.maximizer, s.logdims)
+    push!(ho.history, samples)
+    # push!(ho.results, res)
+    nt = (; Pair.((:i, ho.params...), (iter, samples...))...)
+    return nt, iter+1
 end
 
 

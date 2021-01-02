@@ -122,6 +122,20 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
 
         @test length(collect(ho) ) == 10
         @test length([a for a ∈ ho]) == 10
+        
+        @test_throws AssertionError begin
+            ho = Hyperoptimizer(10, GPSampler(Min), a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
+            for (i,a,b,c) in ho
+                println(i, "\t", a, "\t", b, "\t", c)
+            end
+        end
+
+        ho = Hyperoptimizer(10, GPSampler(Min), a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
+        for (i,a,b,c) in ho
+            println(i, "\t", a, "\t", b, "\t", c)
+            push!(ho.results, randn())
+        end
+
 
     end
 

@@ -119,7 +119,6 @@ If used in this way, the hyperoptimizer **can not** keep track of the function v
 ho = Hyperoptimizer(10, a = LinRange(1,2), b = [true, false], c = randn(100))
 for (i,a,b,c) in ho
     res = computations(a,b,c)
-    push!(ho.results, res)
     push!(ho.history, [a,b,c])
 end
 ```
