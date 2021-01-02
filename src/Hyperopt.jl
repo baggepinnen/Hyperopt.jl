@@ -16,13 +16,14 @@ using BayesianOptimization, GaussianProcesses
 const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
 
 abstract type Sampler end
-Base.@kwdef struct Hyperoptimizer
+Base.@kwdef struct Hyperoptimizer{S<:Sampler, F}
     iterations::Int
     params
     candidates
     history = []
     results = []
-    sampler::Sampler = RandomSampler()
+    sampler::S = RandomSampler()
+    objective::F = nothing
 end
 
 function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
@@ -78,30 +79,41 @@ function preprocess_expression(ex)
         i += 1
     end
     params = ntuple(i->params[i], length(params))
+    fun = quote
+        $(Expr(:tuple, esc.(params)...)) -> begin
+            $(esc(ex.args[2]))
+        end
+    end
 
-    params, candidates, sampler_
+    params, candidates, sampler_, fun
 end
 
-function macrobody(ex, params, candidates, sampler)
+
+function optimize(ho::Hyperoptimizer)
+    Juno.progress() do id
+        for nt = ho
+            res = ho.objective(nt...)
+            push!(ho.results, res)
+            Base.CoreLogging.@logmsg Base.CoreLogging.BelowMinLevel "Hyperopt" progress=nt.i/ho.iterations  _id=id
+        end
+    end
+end
+
+
+function macrobody(ex, params, candidates, sampler, objective)
     if sampler.args[1] === :Hyperband
         return macrobody_hyperband(ex, params, candidates, sampler)
     end
     quote
-        ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)))
-        Juno.progress() do id
-            for $(Expr(:tuple, esc.(params)...)) = ho
-                res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
-                push!(ho.results, res)
-                Base.CoreLogging.@logmsg Base.CoreLogging.BelowMinLevel "Hyperopt" progress=$(esc(params[1]))/ho.iterations  _id=id
-            end
-        end
+        ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = $objective)
+        optimize(ho)
         ho
     end
 end
 
 macro hyperopt(ex)
-    params, candidates, sampler_ = preprocess_expression(ex)
-    macrobody(ex, params, candidates, sampler_)
+    pre = preprocess_expression(ex)
+    macrobody(ex, pre...)
 end
 
 function pmacrobody(ex, params, candidates, sampler_)

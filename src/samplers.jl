@@ -151,7 +151,7 @@ function (s::GPSampler)(ho, iter)
     # sleep(0.2)
     iters = min(70, prod(length, s.candidates))
     # iters = 3000
-    ho2 = Hyperoptimizer(iterations=iters, params=ho.params, candidates=s.candidates)
+    ho2 = Hyperoptimizer(iterations=iters, params=ho.params, candidates=s.candidates, objective=acqfunc)
     for params in ho2
         params2 = collect(params)[2:end]
         res = -Inf
@@ -202,19 +202,20 @@ function macrobody_hyperband(ex, params, candidates, sampler)
             ss = string($(esc(sampler)).inner)
             @info "Starting Hyperband with inner sampler $(ss). Setting the number of iterations to R*η^log(η,R)=$(iters), make sure all candidate vectors have this length as well!"
         end
-        ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)))
-
         costfun = $(Expr(:tuple, esc.(params)...)) -> begin
             $(esc(:(state = nothing)))
             $(esc(ex.args[2]))
         end
         (::$typeof(costfun))($(esc(params[1])), $(esc(:state))) = $(esc(ex.args[2]))
-        hyperband($(esc(sampler)), ho, costfun)
+        ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective=costfun)
+
+        hyperband(ho)
         ho
     end
 end
 
-function hyperband(hb::Hyperband, ho, costfun)
+function hyperband(ho::Hyperoptimizer{Hyperband})
+    hb = ho.sampler
     R,η = hb.R, hb.η
     hb.minimum = (Inf,)
     smax = floor(Int, log(η,R))
@@ -224,7 +225,7 @@ function hyperband(hb::Hyperband, ho, costfun)
         for s in smax:-1:0
             n = ceil(Int, (B/R)*((η^s)/(s+1)))
             r = R / (η^s)
-            minᵢ = successive_halving(hb, ho, costfun, n, r, s)
+            minᵢ = successive_halving(ho, n, r, s)
             if minᵢ[1] < hb.minimum[1]
                 hb.minimum = minᵢ
             end
@@ -235,7 +236,9 @@ function hyperband(hb::Hyperband, ho, costfun)
 end
 
 
-function successive_halving(hb, ho, costfun, n, r=1, s=round(Int, log(hb.η, n)))
+function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)))
+    hb = ho.sampler
+    costfun = ho.objective
     η = hb.η
     minimum = Inf
     T = [ hb.inner(ho, i) for i=1:n ]
