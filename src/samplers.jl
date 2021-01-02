@@ -149,7 +149,7 @@ function (s::GPSampler)(ho, iter)
     # plot(s) |> display
     # plot!(x->acqfunc([x]), 1, 5, sp=2)
     # sleep(0.2)
-    iters = min(30, prod(length, s.candidates))
+    iters = min(70, prod(length, s.candidates))
     # iters = 3000
     ho2 = Hyperoptimizer(iterations=iters, params=ho.params, candidates=s.candidates)
     for params in ho2
