@@ -92,7 +92,7 @@ function macrobody(ex, params, candidates, sampler)
             for $(Expr(:tuple, esc.(params)...)) = ho
                 res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
                 push!(ho.results, res)
-                Base.CoreLogging.@logmsg -1 "Hyperopt" progress=$(esc(params[1]))/ho.iterations  _id=id
+                Base.CoreLogging.@logmsg Base.CoreLogging.BelowMinLevel "Hyperopt" progress=$(esc(params[1]))/ho.iterations  _id=id
             end
         end
         ho
