@@ -98,7 +98,7 @@ function from_logspace(x,logdims)
 end
 
 function init!(s::GPSampler, ho)
-    s.model === nothing || return # Already initialized
+    # s.model === nothing || return # Already initialized
     ndims                = length(ho.candidates)
     logdims              = islogspace.(ho.candidates)
     candidates           = to_logspace(ho.candidates, logdims)
@@ -109,10 +109,11 @@ function init!(s::GPSampler, ho)
     log_function_noise   = 0.
     hypertuning_interval = max(9, ho.iterations ÷ 9)
     model = ElasticGPE(ndims, mean = MeanConst(0.),
-                       kernel = SEArd(log.(kernel_widths), log_function_noise), logNoise = 0.)
+                       kernel = SEArd(log.(kernel_widths), log_function_noise), logNoise = 0., capacity=ho.iterations+1)
+    # set_priors!(model.mean, [GaussianProcesses.Normal(0, 100)])
 
-    modeloptimizer = MAPGPOptimizer(every = hypertuning_interval, noisebounds = [-5, 0], # log bounds on the function noise?
-                                    maxeval = 40) # max iters for optimization of the GP hyperparams
+    modeloptimizer = MAPGPOptimizer(every = hypertuning_interval, noisebounds = [-4, 3], # log bounds on the function noise?
+                                    maxeval = 40, kernel_bounds=fill([0,0,0], length(kernel_widths))) # max iters for optimization of the GP hyperparams
 
     s.model = model
     s.modeloptimizer = modeloptimizer
@@ -120,21 +121,26 @@ function init!(s::GPSampler, ho)
     s.candidates = candidates
 end
 
+function train_model!(s, ho)
+    xv = [reshape(to_logspace(float.(ho.history[j]), s.logdims), :, 1) for j in 1:length(ho.history)]
+    input = reduce(hcat, xv)
+    targets = Int(s.sense)*ho.results
+    BayesianOptimization.update!(s.model, input, targets)
+    BayesianOptimization.optimizemodel!(s.modeloptimizer, s.model) # This determines whether to run or not internally?
+end
+
 
 function (s::GPSampler)(ho, iter)
     init!(s, ho)
     iter = length(ho.history)+1
-    if iter <= 3
+    th = max(3, length(ho.candidates))
+    if iter <= th
         return [rand(HO_RNG[threadid()], list) for (dim,list) in enumerate(ho.candidates)]
     else
-        input = reshape(to_logspace(float.(ho.history[end]), s.logdims), :, 1)
         try
-            BayesianOptimization.update!(s.model, input, [Int(s.sense)*ho.results[end]])
-            if iter >= 9
-                BayesianOptimization.optimizemodel!(s.modeloptimizer, s.model) # This determines whether to run or not internally?
-            end
+            train_model!(s, ho)
         catch ex
-            @warn("BayesianOptimization failed at iter $iter: error: ", ex)
+            @warn("BayesianOptimization failed with optimizemodel! at iter $iter: error: ", ex)
         end
     end
 
@@ -151,6 +157,11 @@ function (s::GPSampler)(ho, iter)
         res = -Inf
         try
             res = acqfunc(params2)
+            if isnan(res)
+                init!(s, ho)
+                train_model!(s, ho)
+                acqfunc = BayesianOptimization.acquisitionfunction(ExpectedImprovement(maximum(s.model.y)), s.model)
+            end
         catch ex
             @warn("BayesianOptimization acqfunc failed at iter $iter: error: ", ex)
         end
