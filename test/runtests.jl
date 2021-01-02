@@ -176,24 +176,24 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
     @testset "Parallel" begin
         @info "Testing Parallel"
 
-        horp = @phyperopt for i=100, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
+        horp = @phyperopt for i=300, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
         @test minimum(horp) < 300
-        @test length(horp.history) == 100
-        @test length(horp.results) == 100
+        @test length(horp.history) == 300
+        @test length(horp.results) == 300
 
         Distributed.nworkers() == 0 && addprocs(2)
         @everywhere using Hyperopt
         @everywhere f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2)
-        horp = @phyperopt for i=100, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
+        horp = @phyperopt for i=300, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
         @test minimum(horp) < 300
-        @test length(horp.history) == 100
-        @test length(horp.results) == 100
+        @test length(horp.history) == 300
+        @test length(horp.results) == 300
 
     end
 
