@@ -35,8 +35,7 @@ function robust_acq(s, x=s.model.x)
         try
             return acqfunc(tovec(x[:,i]))
         catch ex
-            @warn("BayesianOptimization failed, error: ", ex)
-            return -Inf
+            @warn("BayesianOptimization failed, error: ", ex); return -Inf
         end
     end
 end
@@ -51,9 +50,7 @@ end
     xvals = from_logspace([model.x[i,:] for i in 1:ndims], s.logdims)
     xrange = [extrema(s.candidates[i]) for i in 1:ndims]
     for i = 1:ndims
-        if logscale([model.y[:]; Int(s.sense)*ms])
-            yscale --> :log10
-        end
+        logscale([model.y[:]; Int(s.sense)*ms]) && (yscale --> :log10)
         @series begin
             subplot := i
             label := "Model function"

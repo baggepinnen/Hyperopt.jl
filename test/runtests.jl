@@ -16,6 +16,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             f(a,b,c=c)
         end
         @test minimum(hor) < 300
+        @test maximum(hor) > 300
         @test length(hor.history) == 100
         @test length(hor.results) == 100
         @test all(hor.history) do h
@@ -24,6 +25,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
 
         printmax(hor)
         printmin(hor)
+        @test length(propertynames(hor)) > length(fieldnames(typeof(hor)))
     end
 
     @testset "Latin hypercube" begin
@@ -114,6 +116,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         for (i,a,b,c) in ho
             println(i, "\t", a, "\t", b, "\t", c)
         end
+        @test length(ho) == 10
 
         ho = Hyperoptimizer(10, a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
         for vals in ho
@@ -163,6 +166,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
         # res = map(1:30) do i
         #     @info("Iteration ", i)
+        @test_nowarn Hyperband(50)
         hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
             # println(i, "\t", a, "\t", b, "\t", c)
             if !(state === nothing)

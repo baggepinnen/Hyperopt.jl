@@ -164,8 +164,7 @@ function Base.iterate(ho::Hyperoptimizer{<:GPSampler}, iter=1)
         try
             res = acqfunc(params2)
             if isnan(res)
-                init!(s, ho)
-                train_model!(s, ho)
+                init!(s, ho); train_model!(s, ho)
                 acqfunc = BayesianOptimization.acquisitionfunction(ExpectedImprovement(maximum(s.model.y)), s.model)
             end
         catch ex
@@ -283,8 +282,4 @@ function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)))
         end
     end
     return minimum
-end
-
-function top_k(hb,T,L,nᵢ,minimum)
-    η = hb.η
 end

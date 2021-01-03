@@ -47,8 +47,6 @@ function Hyperoptimizer(iterations::Int, sampler::Sampler = RandomSampler(); kwa
     Hyperoptimizer(iterations=iterations, params=params, candidates=candidates, sampler=sampler)
 end
 
-Base.getindex(ho::Hyperoptimizer, i...) = getindex(ho.history, i...)
-
 Base.length(ho::Hyperoptimizer) = ho.iterations
 
 
