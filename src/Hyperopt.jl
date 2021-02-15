@@ -16,7 +16,7 @@ using BayesianOptimization, GaussianProcesses
 const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
 
 abstract type Sampler end
-Base.@kwdef struct Hyperoptimizer{S<:Sampler, F}
+Base.@kwdef mutable struct Hyperoptimizer{S<:Sampler, F}
     iterations::Int
     params
     candidates
@@ -63,12 +63,18 @@ function preprocess_expression(ex)
     params     = []
     candidates = []
     sampler_ = :(RandomSampler())
+    ho_ = nothing
     loop = ex.args[1].args # ex.args[1] = the arguments to the For loop
     i = 1
     while i <= length(loop)
         if @capture(loop[i], sampler = sam_) # A sampler was provided
             sampler_ = sam
             deleteat!(loop,i) # Remove the sampler from the args
+            continue
+        end
+        if @capture(loop[i], ho = h_)
+            ho_ = h
+            deleteat!(loop,i)
             continue
         end
         @capture(loop[i], param_ = list_) || error("Wrong syntax, Use For-loop syntax, ex: @hyperopt for i=100, param=LinRange(1,10,100) ...")
@@ -83,7 +89,7 @@ function preprocess_expression(ex)
         end
     end
 
-    params, candidates, sampler_, fun
+    params, candidates, sampler_, ho_, fun
 end
 
 
@@ -98,12 +104,13 @@ function optimize(ho::Hyperoptimizer)
 end
 
 
-function macrobody(ex, params, candidates, sampler, objective)
+function macrobody(ex, params, candidates, sampler, ho_, objective)
     if sampler.args[1] === :Hyperband
-        return macrobody_hyperband(ex, params, candidates, sampler)
+        return macrobody_hyperband(ex, params, candidates, sampler, ho_)
     end
     quote
-        ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = $objective)
+        ho = ($(esc(ho_)) isa Hyperoptimizer) ? $(esc(ho_)) : Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = $objective)
+        ho.iterations = $(esc(candidates[1])) # if using existing ho, set the iterations to the new value.
         optimize(ho)
         ho
     end
@@ -114,10 +121,11 @@ macro hyperopt(ex)
     macrobody(ex, pre...)
 end
 
-function pmacrobody(ex, params, candidates, sampler_)
+function pmacrobody(ex, params, candidates, sampler_, ho_, ::Any)
     quote
         function workaround_function()
-            ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
+            ho = ($(esc(ho_)) isa Hyperoptimizer) ? $(esc(ho_)) : Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
+            ho.iterations = $(esc(candidates[1])) # if using existing ho, set the iterations to the new value.
             ho.sampler isa GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
             init!(ho.sampler, ho)
             res = pmap(1:ho.iterations) do i
@@ -136,8 +144,8 @@ function pmacrobody(ex, params, candidates, sampler_)
 end
 
 macro phyperopt(ex)
-    params, candidates, sampler_ = preprocess_expression(ex)
-    pmacrobody(ex, params, candidates, sampler_)
+    pre = preprocess_expression(ex)
+    pmacrobody(ex, pre...)
 end
 
 function Base.minimum(ho::Hyperoptimizer)
