@@ -26,6 +26,13 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         printmax(hor)
         printmin(hor)
         @test length(propertynames(hor)) > length(fieldnames(typeof(hor)))
+
+        @hyperopt for i=2, ho=hor, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
+            f(a,b,c=c)
+        end
+        @test length(hor.history) == 102
+        @test length(hor.results) == 102
+
     end
 
     @testset "Latin hypercube" begin
@@ -36,12 +43,27 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         end
         @test minimum(hol) < 300
 
+        @test length(hol.history) == 100
+        @test length(hol.results) == 100
+        @hyperopt for i=100, ho = hol, sampler=LHSampler(), a = LinRange(1,5,100), b = repeat([true, false],50), c = exp10.(LinRange(-1,3,100))
+            # println(i, "\t", a, "\t", b, "\t", c)
+            f(a,b,c=c)
+        end
+        @test length(hol.history) == 200
+        @test length(hol.results) == 200
+
 
         hocl = @hyperopt for i=100, sampler=CLHSampler(dims=[Continuous(),Categorical(2),Continuous()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
         @test minimum(hocl) < 300
+        @hyperopt for i=100, ho = hocl, sampler=CLHSampler(dims=[Continuous(),Categorical(2),Continuous()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
+            # println(i, "\t", a, "\t", b, "\t", c)
+            f(a,b,c=c)
+        end
+        @test length(hocl.history) == 200
+        @test length(hocl.results) == 200
 
     end
 
@@ -83,7 +105,14 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         end
         plot(hogp.sampler)
         plot(hogp)
+        @test length(hogp.history) == 50
+        @test length(hogp.results) == 50
 
+        @hyperopt for i=10, ho=hogp, sampler=GPSampler(Min), a = LinRange(1,5,100)
+            a
+        end
+        @test length(hogp.history) == 60
+        @test length(hogp.results) == 60
     end
 
 
@@ -125,7 +154,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
 
         @test length(collect(ho) ) == 10
         @test length([a for a ∈ ho]) == 10
-        
+
         @test_throws AssertionError begin
             ho = Hyperoptimizer(10, GPSampler(Min), a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
             for (i,a,b,c) in ho
@@ -167,28 +196,52 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         # res = map(1:30) do i
         #     @info("Iteration ", i)
         @test_nowarn Hyperband(50)
-        hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
-            # println(i, "\t", a, "\t", b, "\t", c)
-            if !(state === nothing)
-                a,c = state
+        let hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+                # println(i, "\t", a, "\t", b, "\t", c)
+                if !(state === nothing)
+                    a,c = state
+                end
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+                Optim.minimum(res), Optim.minimizer(res)
             end
-            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
-            Optim.minimum(res), Optim.minimizer(res)
+            @test length(hohb.history) == 69
+            @test length(hohb.results) == 69
+            @test minimum(hohb) < 300
+            @hyperopt for i=1, ho=hohb, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+                # println(i, "\t", a, "\t", b, "\t", c)
+                if !(state === nothing)
+                    a,c = state
+                end
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+                Optim.minimum(res), Optim.minimizer(res)
+            end
+            @test length(hohb.history) == 138
+            @test length(hohb.results) == 138
         end
-        @test minimum(hohb) < 300
-
 
         # Special logic for the LHsampler as inner
-        hohb = @hyperopt for i=18, sampler=Hyperband(R=30, η=10, inner=LHSampler()), a = LinRange(1,5,300), c = exp10.(LinRange(-1,3,300))
-            # println(i, "\t", a, "\t", b, "\t", c)
-            if !(state === nothing)
-                a,c = state
+        let hohb = @hyperopt for i=18, sampler=Hyperband(R=30, η=10, inner=LHSampler()), a = LinRange(1,5,300), c = exp10.(LinRange(-1,3,300))
+                # println(i, "\t", a, "\t", b, "\t", c)
+                if !(state === nothing)
+                    a,c = state
+                end
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=100i))
+                Optim.minimum(res), Optim.minimizer(res)
             end
-            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=100i))
-            Optim.minimum(res), Optim.minimizer(res)
+            @test minimum(hohb) < 300
+            @test length(hohb.history) == 13
+            @test length(hohb.results) == 13
+            @hyperopt for i=18, ho=hohb, sampler=Hyperband(R=30, η=10, inner=LHSampler()), a = LinRange(1,5,300), c = exp10.(LinRange(-1,3,300))
+                # println(i, "\t", a, "\t", b, "\t", c)
+                if !(state === nothing)
+                    a,c = state
+                end
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=100i))
+                Optim.minimum(res), Optim.minimizer(res)
+            end
+            @test length(hohb.history) == 26
+            @test length(hohb.results) == 26
         end
-        @test minimum(hohb) < 300
-
 
         # extra robust option
 
@@ -228,6 +281,12 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @test length(horp.history) == 300
         @test length(horp.results) == 300
 
+        @phyperopt for i=100, ho=horp, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
+            # println(i, "\t", a, "\t", b, "\t", c)
+            f(a,b,c=c)
+        end
+        @test length(horp.history) == 400
+        @test length(horp.results) == 400
     end
 
 end

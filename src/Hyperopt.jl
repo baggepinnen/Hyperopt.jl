@@ -113,7 +113,7 @@ function create_ho(params, candidates, sampler, ho_, objective_, init::Bool = fa
             $(esc(ho_)).candidates = $(Expr(:tuple, esc.(candidates[2:end])...))
             $(esc(ho_))
         else
-            objective, iters = ($sampler isa Hyperband) ? $(objective_) : ($(objective_), $(esc(candidates[1])))
+            objective, iters = $(esc(sampler)) isa Hyperband ? $(objective_) : ($(objective_), $(esc(candidates[1])))
             ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = objective)
             $(init) && init!(ho.sampler, ho)
             ho
@@ -140,6 +140,7 @@ end
 function pmacrobody(ex, params, ho_)
     quote
         ho = $ho_
+        hist = copy(ho.history)
         res = pmap(1:ho.iterations) do i
             $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
             res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
@@ -147,7 +148,7 @@ function pmacrobody(ex, params, ho_)
             res, $(Expr(:tuple, esc.(params[2:end])...))
         end
         append!(ho.results, getindex.(res,1))
-        empty!(ho.history) # The call to iterate(ho) populates history, but only on host process
+        ho.history = hist
         append!(ho.history, getindex.(res,2))
         ho
     end
