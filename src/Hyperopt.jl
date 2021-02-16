@@ -106,11 +106,17 @@ function optimize(ho::Hyperoptimizer)
     ho
 end
 
-function macrobody(ex, params, candidates, sampler, ho_, objective)
+function create_ho(params, candidates, sampler, ho_, objective, init::Bool = false)
     quote
-        ho = ($(esc(ho_)) isa Hyperoptimizer) ? $(esc(ho_)) : Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = $(objective))
-        ho.iterations = $(esc(candidates[1])) # if using existing ho, set the iterations to the new value.
-        optimize(ho)
+        if $(esc(ho_)) isa Hyperoptimizer # use existing ho.
+            $(esc(ho_)).iterations = $(esc(candidates[1]))
+            $(esc(ho_)).candidates = $(Expr(:tuple, esc.(candidates[2:end])...))
+            $(esc(ho_))
+        else
+            ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = $(objective))
+            $(init) && init!(ho.sampler, ho)
+            ho
+        end
     end
 end
 
@@ -119,15 +125,14 @@ macro hyperopt(ex)
     if pre[3].args[1] === :Hyperband
         macrobody_hyperband(ex, pre...)
     else
-        macrobody(ex, pre...)
+        ho_ = create_ho(pre...)
+        :(optimize($ho_))
     end
 end
 
-function pmacrobody(ex, params, candidates, sampler_, ho_, objective)
+function pmacrobody(ex, params, ho_)
     quote
-        ho = ($(esc(ho_)) isa Hyperoptimizer) ? $(esc(ho_)) : Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)), objective = $(objective))
-        ho.iterations = $(esc(candidates[1])) # if using existing ho, set the iterations to the new value.
-        ($(esc(ho_)) isa Hyperoptimizer) || init!(ho.sampler, ho)
+        ho = $ho_
         res = pmap(1:ho.iterations) do i
             $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
             res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
@@ -144,7 +149,8 @@ end
 macro phyperopt(ex)
     pre = preprocess_expression(ex)
     pre[3].args[1] === :GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
-    pmacrobody(ex, pre...)
+    ho_ = create_ho(pre..., true)
+    pmacrobody(ex, pre[1], ho_)
 end
 
 function Base.minimum(ho::Hyperoptimizer)
