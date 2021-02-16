@@ -106,14 +106,15 @@ function optimize(ho::Hyperoptimizer)
     ho
 end
 
-function create_ho(params, candidates, sampler, ho_, objective, init::Bool = false)
+function create_ho(params, candidates, sampler, ho_, objective_, init::Bool = false)
     quote
         if $(esc(ho_)) isa Hyperoptimizer # use existing ho.
             $(esc(ho_)).iterations = $(esc(candidates[1]))
             $(esc(ho_)).candidates = $(Expr(:tuple, esc.(candidates[2:end])...))
             $(esc(ho_))
         else
-            ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = $(objective))
+            objective, iters = ($sampler isa Hyperband) ? $(objective_) : ($(objective_), $(esc(candidates[1])))
+            ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = objective)
             $(init) && init!(ho.sampler, ho)
             ho
         end
@@ -123,7 +124,13 @@ end
 macro hyperopt(ex)
     pre = preprocess_expression(ex)
     if pre[3].args[1] === :Hyperband
-        macrobody_hyperband(ex, pre...)
+        costfun_ = hyperband_costfun(ex, pre...)
+        ho_ = create_ho(pre[1:4]..., costfun_)
+        quote
+            ho = $ho_
+            hyperband(ho)
+            ho
+        end
     else
         ho_ = create_ho(pre...)
         :(optimize($ho_))
