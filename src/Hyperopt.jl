@@ -83,11 +83,13 @@ function preprocess_expression(ex)
         i += 1
     end
     params = ntuple(i->params[i], length(params))
+    state_ = sampler_.args[1] === :Hyperband ? :(state = nothing) : :(nothing)
     fun = quote
-        $(Expr(:tuple, esc.(params)...)) -> begin
-            $(esc(ex.args[2]))
+            $(Expr(:tuple, esc.(params)...)) -> begin
+                $(esc(state_))
+                $(esc(ex.args[2]))
+            end
         end
-    end
 
     params, candidates, sampler_, ho_, fun
 end
@@ -103,13 +105,9 @@ function optimize(ho::Hyperoptimizer)
     end
 end
 
-
 function macrobody(ex, params, candidates, sampler, ho_, objective)
-    if sampler.args[1] === :Hyperband
-        return macrobody_hyperband(ex, params, candidates, sampler, ho_)
-    end
     quote
-        ho = ($(esc(ho_)) isa Hyperoptimizer) ? $(esc(ho_)) : Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = $objective)
+        ho = ($(esc(ho_)) isa Hyperoptimizer) ? $(esc(ho_)) : Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = $(objective))
         ho.iterations = $(esc(candidates[1])) # if using existing ho, set the iterations to the new value.
         optimize(ho)
         ho
@@ -118,33 +116,34 @@ end
 
 macro hyperopt(ex)
     pre = preprocess_expression(ex)
-    macrobody(ex, pre...)
+    if pre[3].args[1] === :Hyperband
+        macrobody_hyperband(ex, pre...)
+    else
+        macrobody(ex, pre...)
+    end
 end
 
-function pmacrobody(ex, params, candidates, sampler_, ho_, ::Any)
+function pmacrobody(ex, params, candidates, sampler_, ho_, objective)
     quote
-        function workaround_function()
-            ho = ($(esc(ho_)) isa Hyperoptimizer) ? $(esc(ho_)) : Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
-            ho.iterations = $(esc(candidates[1])) # if using existing ho, set the iterations to the new value.
-            ho.sampler isa GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
-            init!(ho.sampler, ho)
-            res = pmap(1:ho.iterations) do i
-                $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
-                res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
+        ho = ($(esc(ho_)) isa Hyperoptimizer) ? $(esc(ho_)) : Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)), objective = $(objective))
+        ho.iterations = $(esc(candidates[1])) # if using existing ho, set the iterations to the new value.
+        ($(esc(ho_)) isa Hyperoptimizer) || init!(ho.sampler, ho)
+        res = pmap(1:ho.iterations) do i
+            $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
+            res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
 
-                res, $(Expr(:tuple, esc.(params[2:end])...))
-            end
-            append!(ho.results, getindex.(res,1))
-            empty!(ho.history) # The call to iterate(ho) populates history, but only on host process
-            append!(ho.history, getindex.(res,2))
-            ho
+            res, $(Expr(:tuple, esc.(params[2:end])...))
         end
-        workaround_function()
+        append!(ho.results, getindex.(res,1))
+        empty!(ho.history) # The call to iterate(ho) populates history, but only on host process
+        append!(ho.history, getindex.(res,2))
+        ho
     end
 end
 
 macro phyperopt(ex)
     pre = preprocess_expression(ex)
+    pre[3].args[1] === :GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
     pmacrobody(ex, pre...)
 end
 
