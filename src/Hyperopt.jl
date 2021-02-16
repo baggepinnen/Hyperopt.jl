@@ -103,6 +103,7 @@ function optimize(ho::Hyperoptimizer)
             Base.CoreLogging.@logmsg Base.CoreLogging.BelowMinLevel "Hyperopt" progress=nt.i/ho.iterations  _id=id
         end
     end
+    ho
 end
 
 function macrobody(ex, params, candidates, sampler, ho_, objective)
@@ -110,7 +111,6 @@ function macrobody(ex, params, candidates, sampler, ho_, objective)
         ho = ($(esc(ho_)) isa Hyperoptimizer) ? $(esc(ho_)) : Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = $(objective))
         ho.iterations = $(esc(candidates[1])) # if using existing ho, set the iterations to the new value.
         optimize(ho)
-        ho
     end
 end
 
