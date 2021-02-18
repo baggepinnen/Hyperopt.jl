@@ -108,16 +108,16 @@ end
 
 function create_ho(params, candidates, sampler, ho_, objective_, init::Bool = false)
     quote
-        if $(esc(ho_)) isa Hyperoptimizer # use existing ho.
-            $(esc(ho_)).iterations = $(esc(candidates[1]))
-            $(esc(ho_)).candidates = $(Expr(:tuple, esc.(candidates[2:end])...))
-            $(esc(ho_))
+        objective, iters = $(esc(sampler)) isa Hyperband ? $(objective_) : ($(objective_), $(esc(candidates[1])))
+        ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = objective)
+        if $(esc(ho_)) isa Hyperoptimizer # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
+            ho.sampler = $(esc(ho_)).sampler
+            ho.history = $(esc(ho_)).history
+            ho.results = $(esc(ho_)).results
         else
-            objective, iters = $(esc(sampler)) isa Hyperband ? $(objective_) : ($(objective_), $(esc(candidates[1])))
-            ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = objective)
             $(init) && init!(ho.sampler, ho)
-            ho
         end
+        ho
     end
 end
 
