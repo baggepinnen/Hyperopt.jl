@@ -199,7 +199,7 @@ Base.@kwdef mutable struct Hyperband <: Sampler
 end
 Hyperband(R) = Hyperband(R=R)
 
-function macrobody_hyperband(ex, params, candidates, sampler)
+function hyperband_costfun(ex, params, candidates, sampler, ho_, objective)
     quote
         iters = $(esc(candidates[1]))
         if $(esc(sampler)).inner isa LHSampler
@@ -209,15 +209,9 @@ function macrobody_hyperband(ex, params, candidates, sampler)
             ss = string($(esc(sampler)).inner)
             @info "Starting Hyperband with inner sampler $(ss). Setting the number of iterations to R*η^log(η,R)=$(iters), make sure all candidate vectors have this length as well!"
         end
-        costfun = $(Expr(:tuple, esc.(params)...)) -> begin
-            $(esc(:(state = nothing)))
-            $(esc(ex.args[2]))
-        end
+        costfun = $(objective)
         (::$typeof(costfun))($(esc(params[1])), $(esc(:state))) = $(esc(ex.args[2]))
-        ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective=costfun)
-
-        hyperband(ho)
-        ho
+        costfun, iters
     end
 end
 

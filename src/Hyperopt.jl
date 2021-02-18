@@ -16,7 +16,7 @@ using BayesianOptimization, GaussianProcesses
 const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
 
 abstract type Sampler end
-Base.@kwdef struct Hyperoptimizer{S<:Sampler, F}
+Base.@kwdef mutable struct Hyperoptimizer{S<:Sampler, F}
     iterations::Int
     params
     candidates
@@ -63,6 +63,7 @@ function preprocess_expression(ex)
     params     = []
     candidates = []
     sampler_ = :(RandomSampler())
+    ho_ = nothing
     loop = ex.args[1].args # ex.args[1] = the arguments to the For loop
     i = 1
     while i <= length(loop)
@@ -71,19 +72,26 @@ function preprocess_expression(ex)
             deleteat!(loop,i) # Remove the sampler from the args
             continue
         end
+        if @capture(loop[i], ho = h_)
+            ho_ = h
+            deleteat!(loop,i)
+            continue
+        end
         @capture(loop[i], param_ = list_) || error("Wrong syntax, Use For-loop syntax, ex: @hyperopt for i=100, param=LinRange(1,10,100) ...")
         push!(params, param)
         push!(candidates, list)
         i += 1
     end
     params = ntuple(i->params[i], length(params))
+    state_ = sampler_.args[1] === :Hyperband ? :(state = nothing) : :(nothing)
     fun = quote
-        $(Expr(:tuple, esc.(params)...)) -> begin
-            $(esc(ex.args[2]))
+            $(Expr(:tuple, esc.(params)...)) -> begin
+                $(esc(state_))
+                $(esc(ex.args[2]))
+            end
         end
-    end
 
-    params, candidates, sampler_, fun
+    params, candidates, sampler_, ho_, fun
 end
 
 
@@ -95,49 +103,62 @@ function optimize(ho::Hyperoptimizer)
             Base.CoreLogging.@logmsg Base.CoreLogging.BelowMinLevel "Hyperopt" progress=nt.i/ho.iterations  _id=id
         end
     end
+    ho
 end
 
-
-function macrobody(ex, params, candidates, sampler, objective)
-    if sampler.args[1] === :Hyperband
-        return macrobody_hyperband(ex, params, candidates, sampler)
-    end
+function create_ho(params, candidates, sampler, ho_, objective_, init::Bool = false)
     quote
-        ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = $objective)
-        optimize(ho)
+        objective, iters = $(esc(sampler)) isa Hyperband ? $(objective_) : ($(objective_), $(esc(candidates[1])))
+        ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = objective)
+        if $(esc(ho_)) isa Hyperoptimizer # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
+            ho.sampler = $(esc(ho_)).sampler
+            ho.history = $(esc(ho_)).history
+            ho.results = $(esc(ho_)).results
+        else
+            $(init) && init!(ho.sampler, ho)
+        end
         ho
     end
 end
 
 macro hyperopt(ex)
     pre = preprocess_expression(ex)
-    macrobody(ex, pre...)
-end
-
-function pmacrobody(ex, params, candidates, sampler_)
-    quote
-        function workaround_function()
-            ho = Hyperoptimizer(iterations = $(esc(candidates[1])), params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler_)))
-            ho.sampler isa GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
-            init!(ho.sampler, ho)
-            res = pmap(1:ho.iterations) do i
-                $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
-                res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
-
-                res, $(Expr(:tuple, esc.(params[2:end])...))
-            end
-            append!(ho.results, getindex.(res,1))
-            empty!(ho.history) # The call to iterate(ho) populates history, but only on host process
-            append!(ho.history, getindex.(res,2))
+    if pre[3].args[1] === :Hyperband
+        costfun_ = hyperband_costfun(ex, pre...)
+        ho_ = create_ho(pre[1:4]..., costfun_)
+        quote
+            ho = $ho_
+            hyperband(ho)
             ho
         end
-        workaround_function()
+    else
+        ho_ = create_ho(pre...)
+        :(optimize($ho_))
+    end
+end
+
+function pmacrobody(ex, params, ho_)
+    quote
+        ho = $ho_
+        hist = copy(ho.history)
+        res = pmap(1:ho.iterations) do i
+            $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
+            res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
+
+            res, $(Expr(:tuple, esc.(params[2:end])...))
+        end
+        append!(ho.results, getindex.(res,1))
+        ho.history = hist
+        append!(ho.history, getindex.(res,2))
+        ho
     end
 end
 
 macro phyperopt(ex)
-    params, candidates, sampler_ = preprocess_expression(ex)
-    pmacrobody(ex, params, candidates, sampler_)
+    pre = preprocess_expression(ex)
+    pre[3].args[1] === :GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
+    ho_ = create_ho(pre..., true)
+    pmacrobody(ex, pre[1], ho_)
 end
 
 function Base.minimum(ho::Hyperoptimizer)
