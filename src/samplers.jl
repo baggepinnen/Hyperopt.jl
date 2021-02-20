@@ -105,7 +105,7 @@ function init!(s::GPSampler, ho)
     log_function_noise   = 0.
     hypertuning_interval = max(9, max(ho.iterations, length(ho.history)) ÷ 9)
     model = ElasticGPE(ndims, mean = MeanConst(0.),
-                       kernel = SEArd(log.(kernel_widths), log_function_noise), logNoise = 0., capacity=ho.iterations+1)
+                       kernel = SEArd(log.(kernel_widths), log_function_noise), logNoise = 0., capacity=max(ho.iterations, length(ho.history))+1)
     # set_priors!(model.mean, [GaussianProcesses.Normal(0, 100)])
 
     modeloptimizer = MAPGPOptimizer(every = hypertuning_interval, noisebounds = [-4, 3], # log bounds on the function noise?
