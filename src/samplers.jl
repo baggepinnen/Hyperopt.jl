@@ -3,8 +3,6 @@ Sample a value For each parameter uniformly at random from the candidate vectors
 """
 struct RandomSampler <: Sampler end
 
-function init!(::RandomSampler, ho) end
-
 function (s::RandomSampler)(ho, iter)
     [list[rand(HO_RNG[threadid()], 1:length(list))] for list in ho.candidates]
 end
@@ -30,7 +28,6 @@ function init!(s::LHSampler, ho)
 end
 
 function (s::LHSampler)(ho, iter)
-    init!(s, ho)
     [list[s.samples[dim,iter]] for (dim,list) in enumerate(ho.candidates)]
 end
 
@@ -54,7 +51,6 @@ function init!(s::CLHSampler, ho)
 end
 
 function (s::CLHSampler)(ho, iter)
-    init!(s, ho)
     [list[s.samples[dim,iter]] for (dim,list) in enumerate(ho.candidates)]
 end
 
@@ -107,9 +103,9 @@ function init!(s::GPSampler, ho)
     widths               = upper_bounds - lower_bounds
     kernel_widths        = widths/10
     log_function_noise   = 0.
-    hypertuning_interval = max(9, ho.iterations ÷ 9)
+    hypertuning_interval = max(9, max(ho.iterations, length(ho.history)) ÷ 9)
     model = ElasticGPE(ndims, mean = MeanConst(0.),
-                       kernel = SEArd(log.(kernel_widths), log_function_noise), logNoise = 0., capacity=ho.iterations+1)
+                       kernel = SEArd(log.(kernel_widths), log_function_noise), logNoise = 0., capacity=max(ho.iterations, length(ho.history))+1)
     # set_priors!(model.mean, [GaussianProcesses.Normal(0, 100)])
 
     modeloptimizer = MAPGPOptimizer(every = hypertuning_interval, noisebounds = [-4, 3], # log bounds on the function noise?
@@ -135,7 +131,7 @@ function Base.iterate(ho::Hyperoptimizer{<:GPSampler}, iter=1)
     s = ho.sampler
     init!(s, ho)
     th = max(4, length(ho.candidates)+1)
-    if iter <= th
+    if length(ho.history) < th
         samples = [rand(HO_RNG[threadid()], list) for (dim,list) in enumerate(ho.candidates)]
         nt = (; Pair.((:i, ho.params...), (iter, samples...))...)
         # res = ho.objective(iter, samples...)

@@ -106,7 +106,7 @@ function optimize(ho::Hyperoptimizer)
     ho
 end
 
-function create_ho(params, candidates, sampler, ho_, objective_, init::Bool = false)
+function create_ho(params, candidates, sampler, ho_, objective_)
     quote
         objective, iters = $(esc(sampler)) isa Hyperband ? $(objective_) : ($(objective_), $(esc(candidates[1])))
         ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = objective)
@@ -115,7 +115,8 @@ function create_ho(params, candidates, sampler, ho_, objective_, init::Bool = fa
             ho.history = $(esc(ho_)).history
             ho.results = $(esc(ho_)).results
         else
-            $(init) && init!(ho.sampler, ho)
+            s = (x->x isa Hyperband ? x.inner : x)(ho.sampler)
+            s isa Union{LHSampler,CLHSampler,GPSampler} && init!(s, ho)
         end
         ho
     end
@@ -157,7 +158,7 @@ end
 macro phyperopt(ex)
     pre = preprocess_expression(ex)
     pre[3].args[1] === :GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
-    ho_ = create_ho(pre..., true)
+    ho_ = create_ho(pre...)
     pmacrobody(ex, pre[1], ho_)
 end
 
