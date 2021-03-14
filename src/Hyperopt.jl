@@ -140,18 +140,21 @@ end
 
 function pmacrobody(ex, params, ho_)
     quote
-        ho = $ho_
-        hist = copy(ho.history)
-        res = pmap(1:ho.iterations) do i
-            $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
-            res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
+        function workaround_function()
+            ho = $ho_
+            # hist = copy(ho.history)
+            res = pmap(1:ho.iterations) do i
+                $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
+                res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
 
-            res, $(Expr(:tuple, esc.(params[2:end])...))
+                res, $(Expr(:tuple, esc.(params[2:end])...))
+            end
+            append!(ho.results, getindex.(res,1))
+            # ho.history = hist
+            append!(ho.history, getindex.(res,2))
+            ho
         end
-        append!(ho.results, getindex.(res,1))
-        ho.history = hist
-        append!(ho.history, getindex.(res,2))
-        ho
+        workaround_function()
     end
 end
 

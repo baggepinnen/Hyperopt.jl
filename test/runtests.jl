@@ -270,7 +270,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @test length(horp.history) == 300
         @test length(horp.results) == 300
 
-        Distributed.nworkers() == 0 && addprocs(2)
+        Distributed.nworkers() ≤ 1 && addprocs(2)
         @everywhere using Hyperopt
         @everywhere f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2)
         horp = @phyperopt for i=300, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
@@ -287,6 +287,13 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         end
         @test length(horp.history) == 400
         @test length(horp.results) == 400
+
+        ## test that history and results are in correct order
+        @test all(1:400) do i
+            f(horp.history[i][1:2]..., c=horp.history[i][3]) == horp.results[i]
+        end
+
+
     end
 
 end
