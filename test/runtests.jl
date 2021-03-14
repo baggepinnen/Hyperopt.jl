@@ -262,6 +262,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
     @testset "Parallel" begin
         @info "Testing Parallel"
 
+        rmprocs(workers())
         horp = @phyperopt for i=300, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
@@ -269,6 +270,9 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @test minimum(horp) < 300
         @test length(horp.history) == 300
         @test length(horp.results) == 300
+        @test all(1:300) do i
+            f(horp.history[i][1:2]..., c=horp.history[i][3]) == horp.results[i]
+        end
 
         Distributed.nworkers() ≤ 1 && addprocs(2)
         @everywhere using Hyperopt

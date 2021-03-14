@@ -112,7 +112,7 @@ function create_ho(params, candidates, sampler, ho_, objective_)
         ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = objective)
         if $(esc(ho_)) isa Hyperoptimizer # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
             ho.sampler = $(esc(ho_)).sampler
-            ho.history = $(esc(ho_)).history
+            ho.history = $(esc(ho_)).history # it's important to use the same array, not copy.
             ho.results = $(esc(ho_)).results
         else
             s = (x->x isa Hyperband ? x.inner : x)(ho.sampler)
@@ -141,17 +141,21 @@ end
 function pmacrobody(ex, params, ho_)
     quote
         function workaround_function()
-            ho = $ho_
-            # hist = copy(ho.history)
+            ho = $(ho_)
+            # Getting the history right is tricky when using workers. The approach I've found to work is to
+            # save the actual array (not copy) in hist, temporarily use a new array that will later be discarded
+            # reassign the original array and then append the new history. If a new array is used, the change will not be visible in the original hyperoptimizer
+            hist = ho.history
+            ho.history = []
             res = pmap(1:ho.iterations) do i
                 $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
                 res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
 
                 res, $(Expr(:tuple, esc.(params[2:end])...))
             end
+            ho.history = hist
             append!(ho.results, getindex.(res,1))
-            # ho.history = hist
-            append!(ho.history, getindex.(res,2))
+            append!(ho.history, getindex.(res,2)) # history automatically appended by the iteration
             ho
         end
         workaround_function()
