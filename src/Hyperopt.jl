@@ -1,6 +1,6 @@
 module Hyperopt
 
-export Hyperoptimizer, @hyperopt, @phyperopt, printmin, printmax
+export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax
 export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, Continuous, Categorical, GPSampler, Max, Min, Hyperband
 
 using Base.Threads: threadid, nthreads
@@ -12,6 +12,7 @@ using RecipesBase
 using Distributed
 using LatinHypercubeSampling
 using BayesianOptimization, GaussianProcesses
+using ThreadPools
 
 const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
 
@@ -138,7 +139,7 @@ macro hyperopt(ex)
     end
 end
 
-function pmacrobody(ex, params, ho_)
+function pmacrobody(ex, params, ho_, pmap=pmap)
     quote
         function workaround_function()
             ho = $(ho_)
@@ -147,7 +148,7 @@ function pmacrobody(ex, params, ho_)
             # reassign the original array and then append the new history. If a new array is used, the change will not be visible in the original hyperoptimizer
             hist = ho.history
             ho.history = []
-            res = pmap(1:ho.iterations) do i
+            res = $(pmap)(1:ho.iterations) do i
                 $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
                 res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
 
@@ -162,11 +163,24 @@ function pmacrobody(ex, params, ho_)
     end
 end
 
+"""
+Same as `@hyperopt` but uses `Distributed.pmap` for parallel evaluation of the cost function.
+"""
 macro phyperopt(ex)
     pre = preprocess_expression(ex)
     pre[3].args[1] === :GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
     ho_ = create_ho(pre...)
     pmacrobody(ex, pre[1], ho_)
+end
+
+"""
+Same as `@hyperopt` but uses `ThreadPools.tmap` for multithreaded evaluation of the cost function.
+"""
+macro thyperopt(ex)
+    pre = preprocess_expression(ex)
+    pre[3].args[1] === :GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
+    ho_ = create_ho(pre...)
+    pmacrobody(ex, pre[1], ho_, ThreadPools.tmap)
 end
 
 function Base.minimum(ho::Hyperoptimizer)
