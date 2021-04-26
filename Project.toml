@@ -24,7 +24,7 @@ Juno = "0.7, 0.8"
 LatinHypercubeSampling = "1.2"
 MacroTools = "0.5"
 RecipesBase = "0.7, 0.8, 1.0"
-ThreadPools = "1"
+ThreadPools = "1, 2.0"
 julia = "1.5"
 
 [extras]
