@@ -21,7 +21,7 @@ we wrap it in `@hyperopt` like this
 ```julia
 ho = @hyperopt for i = number_of_samples,
                    a = candidate_values,
-                   b = other_candidate_values,
+                   b = other_candidate_values
 cost = train_model(a,b)
 end
 ```
