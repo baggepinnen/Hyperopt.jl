@@ -1,4 +1,4 @@
-logscale(params::AbstractVector{T}) where T <: Real = /(extrema(params)...) < 2e-2 && minimum(params) > floatmin(float(T))
+logscale(params::AbstractVector{T}) where T <: Real = /(extrema(params)...) < 2e-2 && minimum(params) > 0
 
 logscale(params) = false
 
