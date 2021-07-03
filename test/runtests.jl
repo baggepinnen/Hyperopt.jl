@@ -23,6 +23,8 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             all(hi in hor.candidates[i] for (i,hi) in enumerate(h))
         end
 
+        plot(hor)
+
         printmax(hor)
         printmin(hor)
         @test length(propertynames(hor)) > length(fieldnames(typeof(hor)))
@@ -42,6 +44,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             f(a,b,c=c)
         end
         @test minimum(hol) < 300
+        plot(hol)
 
         @test length(hol.history) == 100
         @test length(hol.results) == 100
