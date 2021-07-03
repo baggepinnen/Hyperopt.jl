@@ -29,7 +29,7 @@ end
 ## Details
 
 1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below).
-2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])`, `Hyperband(R=50, η=3, inner=RandomSampler())` and `GPSampler(Min)/GPSampler(Max)`.
+2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])`, `Hyperband(R=50, η=3, inner=RandomSampler())`.
 3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below).
 4. A useful strategy to achieve log-uniform sampling is logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`.
 5. In the example below, the parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
@@ -138,7 +138,7 @@ end
 ```
 
 # Which sampler to use?
-`RandomSampler` is a good baseline and the default if none is chosen. `GPSampler` fits a Gaussian process to the data and tries to use this model to figure out where the best point to sample next is (using expected improvement). This is somewhat expensive and pays off when the function to optimize is expensive. `Hyperband(R=50, η=3, inner=RandomSampler())` runs the expression with varying amount of resources, allocating more resources to promising hyperparameters. See below for more info on `Hyperband`.
+`RandomSampler` is a good baseline and the default if none is chosen. `Hyperband(R=50, η=3, inner=RandomSampler())` runs the expression with varying amount of resources, allocating more resources to promising hyperparameters. See below for more info on `Hyperband`.
 
 If number of iterations is small, `LHSampler` work better than random search. Caveat: `LHSampler` needs all candidate vectors to be of equal length, i.e.,
 ```julia
