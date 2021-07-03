@@ -281,7 +281,7 @@ function sample_potential_hyperparam(kde::MultiKDE.KDEMulti, min_bandwidth, bw_f
         local ele
         if dim_type isa MultiKDE.ContinuousDim
             bw = bw*bw_factor
-            ele = rand(TruncatedNormal(_param, bw, -_param/bw, (1-_param)/bw))
+            ele = rand(truncated(Normal(_param, bw), -_param/bw, (1-_param)/bw))
         elseif dim_type isa Union{MultiKDE.CategoricalDim, MultiKDE.UnorderedCategoricalDim}
             ele = rand() < (1-bw) ? _param : rand(1:dim_type.levels)
         else
@@ -325,7 +325,7 @@ end
 
 function Base.getproperty(dim_type::Union{MultiKDE.CategoricalDim, MultiKDE.UnorderedCategoricalDim}, v::Symbol)
     if v === :levels
-        getfield(dim_type, :level)
+        return getfield(dim_type, :level)
     end
     getfield(dim_type, v)
 end
