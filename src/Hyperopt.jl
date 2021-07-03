@@ -29,9 +29,9 @@ end
 
 function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
     s === :minimum && (return minimum(replace(ho.results, NaN => Inf)))
-    s === :minimizer && (return ho.history[argmin(ho.results)])
+    s === :minimizer && (return ho.history[argmin(replace(ho.results, NaN => Inf))])
     s === :maximum && (return maximum(replace(ho.results, NaN => Inf)))
-    s === :maximizer && (return ho.history[argmax(ho.results)])
+    s === :maximizer && (return ho.history[argmax(replace(ho.results, NaN => Inf))])
     return getfield(ho,s)
 end
 
