@@ -24,7 +24,7 @@ MacroTools = "0.5"
 MultiKDE = "0.1"
 RecipesBase = "0.7, 0.8, 1.0"
 ThreadPools = "1, 2"
-julia = "1.5"
+julia = "1.6"
 
 [extras]
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
