@@ -201,7 +201,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
                 if !(state === nothing)
                     a,c = state
                 end
-                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
                 Optim.minimum(res), Optim.minimizer(res)
             end
             @test length(hohb.history) == 69
@@ -212,7 +212,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
                 if !(state === nothing)
                     a,c = state
                 end
-                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
                 Optim.minimum(res), Optim.minimizer(res)
             end
             @test length(hohb.history) == 138
@@ -225,7 +225,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
                 if !(state === nothing)
                     a,c = state
                 end
-                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=100i))
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, 100i)))
                 Optim.minimum(res), Optim.minimizer(res)
             end
             @test minimum(hohb) < 300
@@ -236,7 +236,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
                 if !(state === nothing)
                     a,c = state
                 end
-                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=100i))
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, 100i)))
                 Optim.minimum(res), Optim.minimizer(res)
             end
             @test length(hohb.history) == 26
@@ -256,6 +256,36 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], algorithm, Optim.Options(time_limit=2i+2, show_trace=false, show_every=5))
             Optim.minimum(res), (Optim.minimizer(res)..., algorithm)
         end
+
+        # Function/vector/NamedTuple interface
+        fun = function (i, pars)
+            res = Optim.optimize(x->f(x[1],c=x[2]), pars, SimulatedAnnealing(), Optim.Options(time_limit=i/100, show_trace=false, show_every=5))
+            Optim.minimum(res), Optim.minimizer(res)
+        end
+        candidates = [LinRange(1,5,300), exp10.(LinRange(-1,3,300))]
+        hohb = Hyperopt.hyperband(fun, candidates; R=50)
+        @test hohb.minimum < 100.1
+        @test hohb.minimizer ≈ [3, 100] rtol = 1e-2
+
+        candidates = (a=LinRange(1,5,300), c=exp10.(LinRange(-1,3,300))) # NamedTuple should also work
+        hohb = Hyperopt.hyperband(fun, candidates; R=50)
+        @test hohb.minimum < 100.1
+        @test hohb.minimizer ≈ [3, 100] rtol = 1e-2
+        @test hohb.params == [:a, :c]
+
+        # TODO: this is failing: ERROR: LoadError: syntax: Global method definition around /home/fredrikb/.julia/dev/Hyperopt/src/samplers.jl:209 needs to be placed at the top level, or use "eval".
+        # wrapped in function
+        # function run_hyperband()
+        #     @hyperopt for i=1, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+        #         # println(i, "\t", a, "\t", b, "\t", c)
+        #         if !(state === nothing)
+        #             a,c = state
+        #         end
+        #         res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
+        #         Optim.minimum(res), Optim.minimizer(res)
+        #     end
+        # end
+        # run_hyperband()
 
     end
 

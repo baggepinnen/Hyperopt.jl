@@ -205,6 +205,26 @@ hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
 end
 ```
 
+### Function / vector interface
+Hyperband can also be called by itself with a more standard optimizer interface.
+In this case, the objective function takes a scalar `resources` and a vector of 
+parameters, and returns the objective value and a vector of parameters.
+
+Example:
+```julia
+using Hyperopt
+using Optim: optimize, Options, minimum, minimizer
+f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
+
+objective = function (resources::Real, pars::AbstractVector)
+    res = optimize(x->f(x[1],c=x[2]), pars, SimulatedAnnealing(), Options(time_limit=resources/100))
+    minimum(res), minimizer(res)
+end
+
+candidates = (a=LinRange(1,5,300), c=exp10.(LinRange(-1,3,300))) # A vector of vectors also works, but parameters will not get nice names in plots
+hohb = hyperband(objective, candidates; R=50, η=3, threads=true)
+```
+
 # Parallel execution
 - The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.
 - The macro `@thyperopt` uses `ThreadPools.tmap` to evaluate the objective on all available threads. Beware of high memory consumption if your objective allocates a lot of memory.

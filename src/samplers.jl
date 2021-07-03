@@ -189,7 +189,7 @@ end
 """
 Base.@kwdef mutable struct Hyperband <: Sampler
     R
-    η::Int = 3
+    η = 3
     minimum = (Inf,)
     inner = RandomSampler()
 end
@@ -206,23 +206,23 @@ function hyperband_costfun(ex, params, candidates, sampler, ho_, objective)
             @info "Starting Hyperband with inner sampler $(ss). Setting the number of iterations to R*η^log(η,R)=$(iters), make sure all candidate vectors have this length as well!"
         end
         costfun = $(objective)
+        # The row below adds a method to the cost function that accepts the state as a vector
         (::$typeof(costfun))($(esc(params[1])), $(esc(:state))) = $(esc(ex.args[2]))
         costfun, iters
     end
 end
 
-function hyperband(ho::Hyperoptimizer{Hyperband})
+function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false)
     hb = ho.sampler
     R,η = hb.R, hb.η
     hb.minimum = (Inf,)
     smax = floor(Int, log(η,R))
-    B = (smax + 1)*R
-    # ho.iterations >= R*η^smax || error("The number of iterations must be larger than R*η^log(η,R) = $(R*η^smax)")
+    B = (smax + 1)*R # B is budget
     Juno.progress() do id
         for s in smax:-1:0
             n = ceil(Int, (B/R)*((η^s)/(s+1)))
             r = R / (η^s)
-            minᵢ = successive_halving(ho, n, r, s)
+            minᵢ = successive_halving(ho, n, r, s; threads)
             if minᵢ[1] < hb.minimum[1]
                 hb.minimum = minᵢ
             end
@@ -233,43 +233,55 @@ function hyperband(ho::Hyperoptimizer{Hyperband})
 end
 
 
-function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)))
+function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=false)
     hb = ho.sampler
     costfun = ho.objective
     η = hb.η
     minimum = Inf
     T = [ hb.inner(ho, i) for i=1:n ]
     # append!(ho.history, T)
+    mapfun = threads ? ThreadPools.tmap : map
     Juno.progress() do id
         for i in 0:s
-            nᵢ = floor(Int,n/(η^i))
-            rᵢ = floor(Int,r*(η^i))
+            nᵢ = n/(η^i) # Flooring takes place below 
+            rᵢ = r*(η^i) 
             if i == 0
-                LTend = [ costfun(rᵢ, t...) for t in T ]
+                LTend = mapfun(t->costfun(rᵢ, t...), T)
             else
-                LTend = [ costfun(rᵢ, t) for t in T ]
+                LTend = mapfun(t->costfun(rᵢ, t), T)
             end
             L, T = first.(LTend), last.(LTend)
-            # if i == 0
-            #     append!(ho.results, L)
-            # else
-            #     for t in eachindex(T) # Update results for those that were continued
-            #         ho.results[findlast(x->x==T[t], ho.history)] = L[t]
-            #     end
-            # end
+
             append!(ho.history, T)
             append!(ho.results, L)
 
+            # Find top K candidates
             perm = sortperm(L)
             besti = perm[1]
             if L[besti] < minimum[1]
                 minimum = (L[besti], rᵢ, T[besti])
             end
             T = T[perm[1:floor(Int,nᵢ/η)]]
-            # T, minimum
-            # T, minimum = top_k(hb,T,L,nᵢ,minimum)
             Base.CoreLogging.@logmsg -1 "successive_halving" progress=i/s  _id=id
         end
     end
     return minimum
+end
+
+
+function hyperband(f, candidates; R, η=3, inner = RandomSampler(), threads=false)
+    sampler = Hyperband(; R, η, inner)
+    objective(i, pars...) = f(i, [pars...]) # The objective needs two methods, accepting a vector and a list of args
+    objective(i, pars) = f(i, pars) 
+    ho = Hyperoptimizer(;
+        iterations = 1,
+        params = [Symbol("$i") for i in eachindex(candidates)],
+        candidates,
+        history = [],
+        results = Real[],
+        sampler,
+        objective,
+    )
+    hyperband(ho; threads)
+    ho
 end
