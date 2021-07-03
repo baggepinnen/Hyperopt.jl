@@ -166,7 +166,7 @@ end
 ## Hyperband
 `Hyperband(R=50, η=3, inner=RandomSampler())` Implements [Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization](https://arxiv.org/abs/1603.06560). The maximum amount of resources is given by `R` and the parameter `η` roughly determines the proportion of trials discarded between each round of successive halving. When using `Hyperband` the expression inside the `@hyperopt` macro takes the following form
 ```julia
-ho = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
+ho = @hyperopt for i=50, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
     if state === nothing # Query if state is initialized
         res = optimize(resources=i, a, b) # if state is uninitialized, start a new optimization using the selected hyper parameters
     else
@@ -179,18 +179,18 @@ a (simple) working example using `Hyperband` and Optim is
 ```julia
 using Optim
 f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
-hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
+hohb = @hyperopt for i=50, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
     if !(state === nothing)
         a,c = state
     end
-    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=i))
+    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=round(Int, i)))
     Optim.minimum(res), Optim.minimizer(res)
 end
 plot(hohb)
 ```
 and a more complicated example that also explores different Optim optimizers as the inner optimizer is
 ```julia
-hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
+hohb = @hyperopt for i=50, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
     algorithm = [SimulatedAnnealing(), ParticleSwarm(), NelderMead(), BFGS(), NewtonTrustRegion()],
     a = LinRange(1,5,1800),
     c = exp10.(LinRange(-1,3,1800))
