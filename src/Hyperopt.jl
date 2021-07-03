@@ -12,7 +12,7 @@ using RecipesBase
 using Distributed
 using LatinHypercubeSampling
 using ThreadPools
-using Distributions: TruncatedNormal
+using Distributions: Normal, truncated
 using MultiKDE
 
 const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
