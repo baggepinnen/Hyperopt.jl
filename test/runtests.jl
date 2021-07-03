@@ -69,55 +69,6 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
 
     end
 
-    @testset "GP sampler" begin
-        @info "Testing GP sampler"
-
-        @test_throws ErrorException GPSampler()
-
-        foreach(Hyperopt.HO_RNG) do rng
-            Random.seed!(rng, 0)
-        end
-
-        results = map(1:20) do _
-            hogp = @hyperopt for i=40, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
-                # println(i, "\t", a, "\t", b, "\t", c)
-                f(a,Bool(b),c=c)
-            end
-            minimum(hogp)
-        end
-
-        @show mean(results)
-        @show mean(results .< 300)
-
-        @test mean(results) < 300
-        @test mean(results .< 300) >= 0.8
-
-
-        hogp = @hyperopt for i=50, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
-            f(a,Bool(b),c=c)
-        end
-        minimum(hogp)
-
-        plot(hogp.sampler)
-        plot(hogp)
-
-        # One dimension case
-        hogp = @hyperopt for i=50, sampler=GPSampler(Min), a = LinRange(1,5,100)
-            a
-        end
-        plot(hogp.sampler)
-        plot(hogp)
-        @test length(hogp.history) == 50
-        @test length(hogp.results) == 50
-
-        @hyperopt for i=10, ho=hogp, sampler=GPSampler(Min), a = LinRange(1,5,100)
-            a
-        end
-        @test length(hogp.history) == 60
-        @test length(hogp.results) == 60
-    end
-
-
     @testset "Error handling" begin
         @info "Testing Error handling"
 
@@ -158,20 +109,6 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @test length(collect(ho) ) == 10
         @test length([a for a ∈ ho]) == 10
 
-        @test_throws AssertionError begin
-            ho = Hyperoptimizer(10, GPSampler(Min), a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
-            for (i,a,b,c) in ho
-                println(i, "\t", a, "\t", b, "\t", c)
-            end
-        end
-
-        ho = Hyperoptimizer(10, GPSampler(Min), a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
-        for (i,a,b,c) in ho
-            println(i, "\t", a, "\t", b, "\t", c)
-            push!(ho.results, randn())
-        end
-
-
     end
 
 
@@ -184,14 +121,6 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             f(a,b,c=c) + d(a)
         end
     end
-
-
-    @testset "Utils" begin
-        @test Hyperopt.islogspace(exp10.(LinRange(-3, 3, 10)))
-        @test !Hyperopt.islogspace(LinRange(-3, 3, 10))
-        @test !Hyperopt.islogspace([true, false])
-    end
-
 
     @testset "Hyperband" begin
         using Optim
