@@ -180,7 +180,7 @@ a (simple) working example using `Hyperband` and Optim is
 using Optim
 f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
 hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
-    if !(state === nothing)
+    if state !== nothing
         a,c = state
     end
     res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=i))
@@ -194,7 +194,7 @@ hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
     algorithm = [SimulatedAnnealing(), ParticleSwarm(), NelderMead(), BFGS(), NewtonTrustRegion()],
     a = LinRange(1,5,1800),
     c = exp10.(LinRange(-1,3,1800))
-    if !(state === nothing)
+    if state !== nothing
         x0,algorithm = state
     else
         x0 = [a,c]
@@ -224,6 +224,31 @@ end
 candidates = (a=LinRange(1,5,300), c=exp10.(LinRange(-1,3,300))) # A vector of vectors also works, but parameters will not get nice names in plots
 hohb = hyperband(objective, candidates; R=50, η=3, threads=true)
 ```
+
+## BOHB
+[BOHB: Robust and Efficient Hyperparameter Optimization at Scale](https://arxiv.org/abs/1807.01774) refines Hyperband by replacing the random sampler by a bayesian-optimization-based sampler. Now you can use it by simply replace the sampler in `Hyperband` as `BOHB(dims=[<dims>...])`
+
+### Example
+```julia
+using Optim
+hb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+    if state !== nothing
+        a,c = state
+    end
+    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+    Optim.minimum(res), Optim.minimizer(res)
+end
+
+# Using BOHB with same setting, remember to specify dimension types!
+bohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=BOHB(dims=[Hyperopt.Continuous(), Hyperopt.Continuous()])), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+    if state !== nothing
+        a,c = state
+    end
+    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+    Optim.minimum(res), Optim.minimizer(res)
+end
+```
+
 
 # Parallel execution
 - The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.

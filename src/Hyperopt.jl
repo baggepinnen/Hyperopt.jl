@@ -1,7 +1,7 @@
 module Hyperopt
 
 export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax
-export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, Continuous, Categorical, GPSampler, Max, Min, Hyperband, hyperband
+export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, GPSampler, Max, Min, hyperband, Hyperband, BOHB, Continuous, Categorical, UnorderedCategorical
 
 using Base.Threads: threadid, nthreads
 using LinearAlgebra, Statistics, Random
@@ -13,8 +13,19 @@ using Distributed
 using LatinHypercubeSampling
 using BayesianOptimization, GaussianProcesses
 using ThreadPools
+using Distributions: TruncatedNormal
+using MultiKDE
 
 const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
+
+const DimensionType = LHCDimension
+
+# # Types of dimensions
+# const CategoricalDim = Categorical
+# const ContinuousDim = Continuous
+struct UnorderedCategorical <: DimensionType
+    levels::Int64
+end
 
 abstract type Sampler end
 Base.@kwdef mutable struct Hyperoptimizer{S<:Sampler, F}
