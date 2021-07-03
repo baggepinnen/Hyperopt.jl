@@ -1,7 +1,7 @@
 module Hyperopt
 
 export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax
-export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, GPSampler, Max, Min, hyperband, Hyperband, BOHB, Continuous, Categorical, UnorderedCategorical
+export RandomSampler, BlueNoiseSampler, LHSampler, CLHSampler, hyperband, Hyperband, BOHB, Continuous, Categorical, UnorderedCategorical
 
 using Base.Threads: threadid, nthreads
 using LinearAlgebra, Statistics, Random
@@ -11,7 +11,6 @@ using MacroTools: postwalk, prewalk
 using RecipesBase
 using Distributed
 using LatinHypercubeSampling
-using BayesianOptimization, GaussianProcesses
 using ThreadPools
 using Distributions: TruncatedNormal
 using MultiKDE
@@ -128,7 +127,7 @@ function create_ho(params, candidates, sampler, ho_, objective_)
             ho.results = $(esc(ho_)).results
         else
             s = (x->x isa Hyperband ? x.inner : x)(ho.sampler)
-            s isa Union{LHSampler,CLHSampler,GPSampler} && init!(s, ho)
+            s isa Union{LHSampler,CLHSampler} && init!(s, ho)
         end
         ho
     end
@@ -179,7 +178,6 @@ Same as `@hyperopt` but uses `Distributed.pmap` for parallel evaluation of the c
 """
 macro phyperopt(ex)
     pre = preprocess_expression(ex)
-    pre[3].args[1] === :GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
     ho_ = create_ho(pre...)
     pmacrobody(ex, pre[1], ho_)
 end
@@ -189,7 +187,6 @@ Same as `@hyperopt` but uses `ThreadPools.tmap` for multithreaded evaluation of 
 """
 macro thyperopt(ex)
     pre = preprocess_expression(ex)
-    pre[3].args[1] === :GPSampler && error("We currently do not support running the GPSampler in parallel. If this is an issue, open an issue ;)")
     ho_ = create_ho(pre...)
     pmacrobody(ex, pre[1], ho_, ThreadPools.tmap)
 end

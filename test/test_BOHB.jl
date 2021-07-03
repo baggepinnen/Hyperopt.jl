@@ -11,7 +11,7 @@ using Optim
             if !(state === nothing)
                 a,c = state
             end
-            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
             Optim.minimum(res), Optim.minimizer(res)
         end
         @test length(bohb.history) == 69
@@ -22,7 +22,7 @@ using Optim
             if !(state === nothing)
                 a,c = state
             end
-            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+            res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
             Optim.minimum(res), Optim.minimizer(res)
         end
         @test length(bohb.history) == 138
