@@ -1,5 +1,5 @@
 
-logscale(params::AbstractVector{<:Real}) = /(extrema(params)...) < 2e-2 && minimum(params) > eps()
+logscale(params::AbstractVector{T}) where T <: Real = /(extrema(params)...) < 2e-2 && minimum(params) > floatmin(float(T))
 
 logscale(params) = false
 
@@ -16,8 +16,8 @@ logscale(params) = false
             subplot --> i
             label --> "Sampled points"
             legend --> false
-            logscale(params) && (xscale --> :log10)
-            logscale(ho.results) && (yscale --> :log10)
+            xscale --> (logscale(params) ? :log10 : :identity)
+            yscale --> (logscale(ho.results) ? :log10 : :identity)
             params[perm], ho.results[perm]
         end
 
