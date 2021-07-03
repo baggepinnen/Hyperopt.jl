@@ -1,7 +1,7 @@
 name = "Hyperopt"
 uuid = "93e5fe13-2215-51db-baaf-2e9a34fb2712"
 author = ["Fredrik Bagge Carlson <baggepinnen@gmail.com>"]
-version = "0.4.4"
+version = "0.5.0"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
@@ -21,6 +21,7 @@ MultiKDE = "77543b7f-bd95-4024-91c1-46775346e0e7"
 Juno = "0.7, 0.8"
 LatinHypercubeSampling = "1.2"
 MacroTools = "0.5"
+MultiKDE = "0.1"
 RecipesBase = "0.7, 0.8, 1.0"
 ThreadPools = "1, 2"
 julia = "1.5"
