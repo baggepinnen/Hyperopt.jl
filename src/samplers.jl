@@ -68,25 +68,13 @@ Base.@kwdef mutable struct Hyperband <: Sampler
 end
 Hyperband(R) = Hyperband(R=R)
 
-function hyperband_costfun(ex, params, candidates, sampler, ho_, objective)
-    quote
-        iters = $(esc(candidates[1]))
-        if $(esc(sampler)).inner isa LHSampler
-            smax = floor(Int, log($(esc(sampler)).η,$(esc(sampler)).R))
-            B = (smax + 1)*$(esc(sampler)).R
-            iters = floor(Int,$(esc(sampler)).R*$(esc(sampler)).η^smax)
-            ss = string($(esc(sampler)).inner)
-            @info "Starting Hyperband with inner sampler $(ss). Setting the number of iterations to R*η^log(η,R)=$(iters), make sure all candidate vectors have this length as well!"
-        end
-        costfun = $(objective)
-        # The row below adds a method to the cost function that accepts the state as a vector
-        (::$typeof(costfun))($(esc(params[1])), $(esc(:state))) = $(esc(ex.args[2]))
-        costfun, iters
-    end
+function optimize(ho::Hyperoptimizer{<:Hyperband})
+    hyperband(ho)
+    ho
 end
 
 function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false)
-    hb = ho.sampler
+    hb = ho.sampler 
     R,η = hb.R, hb.η
     hb.minimum = (Inf,)
     smax = floor(Int, log(η,R))
@@ -112,7 +100,6 @@ function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=fal
     η = hb.η
     minimum = Inf
     T = [ hb.inner(ho, i) for i=1:n ]
-    # append!(ho.history, T)
     mapfun = threads ? ThreadPools.tmap : map
     Juno.progress() do id
         for i in 0:s

@@ -205,19 +205,17 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @test hohb.minimizer ≈ [3, 100] rtol = 1e-2
         @test hohb.params == [:a, :c]
 
-        # TODO: this is failing: ERROR: LoadError: syntax: Global method definition around /home/fredrikb/.julia/dev/Hyperopt/src/samplers.jl:209 needs to be placed at the top level, or use "eval".
-        # wrapped in function
-        # function run_hyperband()
-        #     @hyperopt for i=1, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
-        #         # println(i, "\t", a, "\t", b, "\t", c)
-        #         if !(state === nothing)
-        #             a,c = state
-        #         end
-        #         res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
-        #         Optim.minimum(res), Optim.minimizer(res)
-        #     end
-        # end
-        # run_hyperband()
+        # test that hyperband can be placed inside a function
+        function run_hyperband()
+            @hyperopt for i=1, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+                if state !== nothing
+                    a,c = state
+                end
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
+                Optim.minimum(res), Optim.minimizer(res)
+            end
+        end
+        run_hyperband()
 
     end
 

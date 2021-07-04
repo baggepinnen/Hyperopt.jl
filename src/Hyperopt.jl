@@ -58,6 +58,18 @@ function Base.iterate(ho::Hyperoptimizer, state=1)
     nt, state+1
 end
 
+"""
+Hyperopt internal function
+
+Returns
+`params, candidates, sampler_, ho_, fun`
+where
+`params` is a vector of symbols
+`candidates` is a vector of expresions creating candidate vectors
+`sampler_` is an expression creating a sampler
+`ho_` is either nothing or an expression for an existing hyperoptimizer
+`fun` is a function from `(i, pars...) -> val` that executes the macrobody
+"""
 function preprocess_expression(ex)
     ex.head == :for || error("Wrong syntax, Use For-loop syntax, ex: @hyperopt for i=100, param=LinRange(1,10,100) ...")
     params     = []
@@ -82,14 +94,18 @@ function preprocess_expression(ex)
         push!(candidates, list)
         i += 1
     end
-    params = ntuple(i->params[i], length(params))
-    state_ = sampler_.args[1] === :Hyperband ? :(state = nothing) : :(nothing)
-    fun = quote
-            $(Expr(:tuple, esc.(params)...)) -> begin
-                $(esc(state_))
-                $(esc(ex.args[2]))
-            end
+    params = (params...,)
+    funname = gensym(:hyperopt_objective)
+    state_ = :(state = nothing)
+    fun = quote # produces a function(i, pars...)
+        function $(funname)($(Expr(:tuple, esc.(params)...))...)
+            $(esc(state_))
+            $(esc(ex.args[2]))
         end
+        function $(funname)($(esc(:i)), $(esc(:state)))
+            $(esc(ex.args[2]))
+        end
+    end
 
     params, candidates, sampler_, ho_, fun
 end
@@ -108,14 +124,18 @@ end
 
 function create_ho(params, candidates, sampler, ho_, objective_)
     quote
-        objective, iters = $(esc(sampler)) isa Hyperband ? $(objective_) : ($(objective_), $(esc(candidates[1])))
-        ho = Hyperoptimizer(iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective = objective)
+        objective, iters = $(objective_), $(esc(candidates[1]))
+        ho = Hyperoptimizer(; iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective)
         if $(esc(ho_)) isa Hyperoptimizer # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
             ho.sampler = $(esc(ho_)).sampler
             ho.history = $(esc(ho_)).history # it's important to use the same array, not copy.
             ho.results = $(esc(ho_)).results
         else
-            s = (x->x isa Hyperband ? x.inner : x)(ho.sampler)
+            s = ho.sampler
+            if s isa Hyperband
+                ho.iterations = length($(esc(candidates[2])))
+                s = s.inner
+            end
             s isa Union{LHSampler,CLHSampler} && init!(s, ho)
         end
         ho
@@ -124,18 +144,8 @@ end
 
 macro hyperopt(ex)
     pre = preprocess_expression(ex)
-    if pre[3].args[1] === :Hyperband
-        costfun_ = hyperband_costfun(ex, pre...)
-        ho_ = create_ho(pre[1:4]..., costfun_)
-        quote
-            ho = $ho_
-            hyperband(ho)
-            ho
-        end
-    else
-        ho_ = create_ho(pre...)
-        :(optimize($ho_))
-    end
+    ho_ = create_ho(pre...)
+    :(optimize($ho_))
 end
 
 function pmacrobody(ex, params, ho_, pmap=pmap)
