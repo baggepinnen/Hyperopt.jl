@@ -1,12 +1,10 @@
 name = "Hyperopt"
 uuid = "93e5fe13-2215-51db-baaf-2e9a34fb2712"
 author = ["Fredrik Bagge Carlson <baggepinnen@gmail.com>"]
-version = "0.4.4"
+version = "0.5.0"
 
 [deps]
-BayesianOptimization = "4c6ed407-134f-591c-93fa-e0f7c164a0ec"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
-GaussianProcesses = "891a1506-143c-57d2-908e-e1f8e92e6de9"
 Juno = "e5e0dc1b-0480-54bc-9374-aad01c23163d"
 LatinHypercubeSampling = "a5e1c1ea-c99a-51d3-a14d-a9a37257b02d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -20,14 +18,13 @@ Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 MultiKDE = "77543b7f-bd95-4024-91c1-46775346e0e7"
 
 [compat]
-BayesianOptimization = "0.2"
-GaussianProcesses = "0.12"
 Juno = "0.7, 0.8"
 LatinHypercubeSampling = "1.2"
 MacroTools = "0.5"
+MultiKDE = "0.1"
 RecipesBase = "0.7, 0.8, 1.0"
-ThreadPools = "1"
-julia = "1.5"
+ThreadPools = "1, 2"
+julia = "1.6"
 
 [extras]
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"

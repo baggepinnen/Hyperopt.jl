@@ -69,55 +69,6 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
 
     end
 
-    @testset "GP sampler" begin
-        @info "Testing GP sampler"
-
-        @test_throws ErrorException GPSampler()
-
-        foreach(Hyperopt.HO_RNG) do rng
-            Random.seed!(rng, 0)
-        end
-
-        results = map(1:20) do _
-            hogp = @hyperopt for i=40, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
-                # println(i, "\t", a, "\t", b, "\t", c)
-                f(a,Bool(b),c=c)
-            end
-            minimum(hogp)
-        end
-
-        @show mean(results)
-        @show mean(results .< 300)
-
-        @test mean(results) < 300
-        @test mean(results .< 300) >= 0.8
-
-
-        hogp = @hyperopt for i=50, sampler=GPSampler(Min), a = LinRange(1,5,100), b = repeat([true, false]',50)[:], c = exp10.(LinRange(-1,3,100))
-            f(a,Bool(b),c=c)
-        end
-        minimum(hogp)
-
-        plot(hogp.sampler)
-        plot(hogp)
-
-        # One dimension case
-        hogp = @hyperopt for i=50, sampler=GPSampler(Min), a = LinRange(1,5,100)
-            a
-        end
-        plot(hogp.sampler)
-        plot(hogp)
-        @test length(hogp.history) == 50
-        @test length(hogp.results) == 50
-
-        @hyperopt for i=10, ho=hogp, sampler=GPSampler(Min), a = LinRange(1,5,100)
-            a
-        end
-        @test length(hogp.history) == 60
-        @test length(hogp.results) == 60
-    end
-
-
     @testset "Error handling" begin
         @info "Testing Error handling"
 
@@ -158,20 +109,6 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @test length(collect(ho) ) == 10
         @test length([a for a ∈ ho]) == 10
 
-        @test_throws AssertionError begin
-            ho = Hyperoptimizer(10, GPSampler(Min), a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
-            for (i,a,b,c) in ho
-                println(i, "\t", a, "\t", b, "\t", c)
-            end
-        end
-
-        ho = Hyperoptimizer(10, GPSampler(Min), a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
-        for (i,a,b,c) in ho
-            println(i, "\t", a, "\t", b, "\t", c)
-            push!(ho.results, randn())
-        end
-
-
     end
 
 
@@ -185,14 +122,6 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         end
     end
 
-
-    @testset "Utils" begin
-        @test Hyperopt.islogspace(exp10.(LinRange(-3, 3, 10)))
-        @test !Hyperopt.islogspace(LinRange(-3, 3, 10))
-        @test !Hyperopt.islogspace([true, false])
-    end
-
-
     @testset "Hyperband" begin
         using Optim
         f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
@@ -204,7 +133,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
                 if !(state === nothing)
                     a,c = state
                 end
-                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
                 Optim.minimum(res), Optim.minimizer(res)
             end
             @test length(hohb.history) == 69
@@ -215,7 +144,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
                 if !(state === nothing)
                     a,c = state
                 end
-                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
                 Optim.minimum(res), Optim.minimizer(res)
             end
             @test length(hohb.history) == 138
@@ -228,7 +157,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
                 if !(state === nothing)
                     a,c = state
                 end
-                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=100i))
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, 100i)))
                 Optim.minimum(res), Optim.minimizer(res)
             end
             @test minimum(hohb) < 300
@@ -239,7 +168,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
                 if !(state === nothing)
                     a,c = state
                 end
-                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=100i))
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, 100i)))
                 Optim.minimum(res), Optim.minimizer(res)
             end
             @test length(hohb.history) == 26
@@ -259,6 +188,36 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], algorithm, Optim.Options(time_limit=2i+2, show_trace=false, show_every=5))
             Optim.minimum(res), (Optim.minimizer(res)..., algorithm)
         end
+
+        # Function/vector/NamedTuple interface
+        fun = function (i, pars)
+            res = Optim.optimize(x->f(x[1],c=x[2]), pars, SimulatedAnnealing(), Optim.Options(time_limit=i/100, show_trace=false, show_every=5))
+            Optim.minimum(res), Optim.minimizer(res)
+        end
+        candidates = [LinRange(1,5,300), exp10.(LinRange(-1,3,300))]
+        hohb = Hyperopt.hyperband(fun, candidates; R=50)
+        @test hohb.minimum < 100.1
+        @test hohb.minimizer ≈ [3, 100] rtol = 1e-2
+
+        candidates = (a=LinRange(1,5,300), c=exp10.(LinRange(-1,3,300))) # NamedTuple should also work
+        hohb = Hyperopt.hyperband(fun, candidates; R=50)
+        @test hohb.minimum < 100.1
+        @test hohb.minimizer ≈ [3, 100] rtol = 1e-2
+        @test hohb.params == [:a, :c]
+
+        # TODO: this is failing: ERROR: LoadError: syntax: Global method definition around /home/fredrikb/.julia/dev/Hyperopt/src/samplers.jl:209 needs to be placed at the top level, or use "eval".
+        # wrapped in function
+        # function run_hyperband()
+        #     @hyperopt for i=1, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+        #         # println(i, "\t", a, "\t", b, "\t", c)
+        #         if !(state === nothing)
+        #             a,c = state
+        #         end
+        #         res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
+        #         Optim.minimum(res), Optim.minimizer(res)
+        #     end
+        # end
+        # run_hyperband()
 
     end
 
@@ -316,6 +275,8 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
 
 
     end
-
-    include("BOHB.jl")
+    @testset "BOHB" begin
+        @info "Testing BOHB"
+        include("test_BOHB.jl")
+    end
 end

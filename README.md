@@ -21,7 +21,7 @@ we wrap it in `@hyperopt` like this
 ```julia
 ho = @hyperopt for i = number_of_samples,
                    a = candidate_values,
-                   b = other_candidate_values,
+                   b = other_candidate_values
 cost = train_model(a,b)
 end
 ```
@@ -29,7 +29,7 @@ end
 ## Details
 
 1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below).
-2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])`, `Hyperband(R=50, η=3, inner=RandomSampler())` and `GPSampler(Min)/GPSampler(Max)`.
+2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])`, `Hyperband(R=50, η=3, inner=RandomSampler())`.
 3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below).
 4. A useful strategy to achieve log-uniform sampling is logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`.
 5. In the example below, the parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
@@ -138,7 +138,7 @@ end
 ```
 
 # Which sampler to use?
-`RandomSampler` is a good baseline and the default if none is chosen. `GPSampler` fits a Gaussian process to the data and tries to use this model to figure out where the best point to sample next is (using expected improvement). This is somewhat expensive and pays off when the function to optimize is expensive. `Hyperband(R=50, η=3, inner=RandomSampler())` runs the expression with varying amount of resources, allocating more resources to promising hyperparameters. See below for more info on `Hyperband`.
+`RandomSampler` is a good baseline and the default if none is chosen. `Hyperband(R=50, η=3, inner=RandomSampler())` runs the expression with varying amount of resources, allocating more resources to promising hyperparameters. See below for more info on `Hyperband`.
 
 If number of iterations is small, `LHSampler` work better than random search. Caveat: `LHSampler` needs all candidate vectors to be of equal length, i.e.,
 ```julia
@@ -180,7 +180,7 @@ a (simple) working example using `Hyperband` and Optim is
 using Optim
 f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
 hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
-    if !(state === nothing)
+    if state !== nothing
         a,c = state
     end
     res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=i))
@@ -194,7 +194,7 @@ hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
     algorithm = [SimulatedAnnealing(), ParticleSwarm(), NelderMead(), BFGS(), NewtonTrustRegion()],
     a = LinRange(1,5,1800),
     c = exp10.(LinRange(-1,3,1800))
-    if !(state === nothing)
+    if state !== nothing
         x0,algorithm = state
     else
         x0 = [a,c]
@@ -205,36 +205,50 @@ hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
 end
 ```
 
+### Function / vector interface
+Hyperband can also be called by itself with a more standard optimizer interface.
+In this case, the objective function takes a scalar `resources` and a vector of 
+parameters, and returns the objective value and a vector of parameters.
+
+Example:
+```julia
+using Hyperopt
+using Optim: optimize, Options, minimum, minimizer
+f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
+
+objective = function (resources::Real, pars::AbstractVector)
+    res = optimize(x->f(x[1],c=x[2]), pars, SimulatedAnnealing(), Options(time_limit=resources/100))
+    minimum(res), minimizer(res)
+end
+
+candidates = (a=LinRange(1,5,300), c=exp10.(LinRange(-1,3,300))) # A vector of vectors also works, but parameters will not get nice names in plots
+hohb = hyperband(objective, candidates; R=50, η=3, threads=true)
+```
+
 ## BOHB
 [BOHB: Robust and Efficient Hyperparameter Optimization at Scale](https://arxiv.org/abs/1807.01774) refines Hyperband by replacing the random sampler by a bayesian-optimization-based sampler. Now you can use it by simply replace the sampler in `Hyperband` as `BOHB(dims=[<dims>...])`
 
 ### Example
 ```julia
 using Optim
-# Using Hyperband
 hb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
-        if !(state === nothing)
-            a,c = state
-        end
-        res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
-        Optim.minimum(res), Optim.minimizer(res)
+    if state !== nothing
+        a,c = state
     end
+    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+    Optim.minimum(res), Optim.minimizer(res)
+end
 
 # Using BOHB with same setting, remember to specify dimension types!
 bohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=BOHB(dims=[Hyperopt.Continuous(), Hyperopt.Continuous()])), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
-        if !(state === nothing)
-            a,c = state
-        end
-        res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
-        Optim.minimum(res), Optim.minimizer(res)
+    if state !== nothing
+        a,c = state
     end
+    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+    Optim.minimum(res), Optim.minimizer(res)
+end
 ```
 
-<!-- ### Empirical Result <sub><sup>[[code]](https://github.com/noil-reed/notebooks/blob/main/BOHB_demo/demo.ipynb)</sub></sup>
-
-Empirical result of [Counting Ones](https://arxiv.org/abs/1807.01774), where x-axis is R and y-axis is regret. We run 10 experiments and take the average for each point in the fiture. 
-
-![Counting Ones](https://github.com/noil-reed/notebooks/blob/main/BOHB_demo/BOHB.svg) -->
 
 # Parallel execution
 - The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.
