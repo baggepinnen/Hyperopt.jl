@@ -53,12 +53,14 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @test length(hol.results) == 200
 
 
-        hocl = @hyperopt for i=100, sampler=CLHSampler(dims=[Continuous(),Categorical(2),Continuous()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
+        # hocl = @hyperopt for i=100, sampler=CLHSampler(dims=[Hyperopt.ContinuousDim(),Hyperopt.CategoricalDim(2),Hyperopt.ContinuousDim()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
+        hocl = @hyperopt for i=100, sampler=CLHSampler(dims=[Hyperopt.Continuous(),Hyperopt.Categorical(2),Hyperopt.Continuous()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
         @test minimum(hocl) < 300
-        @hyperopt for i=100, ho = hocl, sampler=CLHSampler(dims=[Continuous(),Categorical(2),Continuous()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
+        # @hyperopt for i=100, ho = hocl, sampler=CLHSampler(dims=[Hyperopt.ContinuousDim(),Hyperopt.CategoricalDim(2),Hyperopt.ContinuousDim()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
+        @hyperopt for i=100, ho = hocl, sampler=CLHSampler(dims=[Hyperopt.Continuous(),Hyperopt.Categorical(2),Hyperopt.Continuous()]), a = LinRange(1,5,100), b = [true, false], c = exp10.(LinRange(-1,3,100))
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
@@ -125,7 +127,8 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             f(a,b,c=c)
         end
 
-        @test_throws ArgumentError @hyperopt for i=100, sampler=CLHSampler(dims=[Continuous(),Categorical(2),Continuous()]), a = LinRange(1,5,99), b = [true, false], c = exp10.(LinRange(-1,3,100))
+        # @test_throws ArgumentError @hyperopt for i=100, sampler=CLHSampler(dims=[Hyperopt.ContinuousDim(),Hyperopt.CategoricalDim(2),Hyperopt.ContinuousDim()]), a = LinRange(1,5,99), b = [true, false], c = exp10.(LinRange(-1,3,100))
+        @test_throws ArgumentError @hyperopt for i=100, sampler=CLHSampler(dims=[Hyperopt.Continuous(),Hyperopt.CategoricalDim(2),Hyperopt.Continuous()]), a = LinRange(1,5,99), b = [true, false], c = exp10.(LinRange(-1,3,100))
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
@@ -314,4 +317,5 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
 
     end
 
+    include("BOHB.jl")
 end

@@ -205,6 +205,37 @@ hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
 end
 ```
 
+## BOHB
+[BOHB: Robust and Efficient Hyperparameter Optimization at Scale](https://arxiv.org/abs/1807.01774) refines Hyperband by replacing the random sampler by a bayesian-optimization-based sampler. Now you can use it by simply replace the sampler in `Hyperband` as `BOHB(dims=[<dims>...])`
+
+### Example
+```julia
+using Optim
+# Using Hyperband
+hb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+        if !(state === nothing)
+            a,c = state
+        end
+        res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+        Optim.minimum(res), Optim.minimizer(res)
+    end
+
+# Using BOHB with same setting, remember to specify dimension types!
+bohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=BOHB(dims=[Hyperopt.Continuous(), Hyperopt.Continuous()])), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+        if !(state === nothing)
+            a,c = state
+        end
+        res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+        Optim.minimum(res), Optim.minimizer(res)
+    end
+```
+
+<!-- ### Empirical Result <sub><sup>[[code]](https://github.com/noil-reed/notebooks/blob/main/BOHB_demo/demo.ipynb)</sub></sup>
+
+Empirical result of [Counting Ones](https://arxiv.org/abs/1807.01774), where x-axis is R and y-axis is regret. We run 10 experiments and take the average for each point in the fiture. 
+
+![Counting Ones](https://github.com/noil-reed/notebooks/blob/main/BOHB_demo/BOHB.svg) -->
+
 # Parallel execution
 - The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.
 - The macro `@thyperopt` uses `ThreadPools.tmap` to evaluate the objective on all available threads. Beware of high memory consumption if your objective allocates a lot of memory.
