@@ -228,7 +228,7 @@ function (s::BOHB)(ho, iter)
     potential_samples = [sample_potential_hyperparam(s.KDE_good, s.min_bandwidth, s.bw_factor) for _ in 1:s.N_s]
     scores = [score(sample, s.KDE_good, s.KDE_bad) for sample in potential_samples]
     _, best_idx = findmax(scores)
-    potential_samples[best_idx]
+    [potential_samples[best_idx]]
 end
 
 # Sample score l(x)/g(x), refers to line 6 of Algorithm2 in paper
