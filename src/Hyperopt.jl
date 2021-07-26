@@ -13,8 +13,6 @@ using Distributed
 using LatinHypercubeSampling
 using ThreadPools
 
-const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
-
 abstract type Sampler end
 Base.@kwdef mutable struct Hyperoptimizer{S<:Sampler, F}
     iterations::Int

@@ -1,10 +1,30 @@
-    """
-Sample a value For each parameter uniformly at random from the candidate vectors. Log-uniform sampling available by providing a log-spaced candidate vector.
 """
-struct RandomSampler <: Sampler end
+    RandomSampler{T<:AbstractRNG} <: Sampler
+
+Sample a value for each parameter uniformly at random from the candidate vectors. Log-uniform sampling available by providing a log-spaced candidate vector.
+
+Optionally, pass an `AbstractRNG` to initialize.
+"""
+struct RandomSampler{T<:AbstractRNG} <: Sampler
+    rng_channel::RemoteChannel{Channel{T}}
+end
+
+RandomSampler() = RandomSampler(MersenneTwister(rand(1:1000)))
+
+function RandomSampler(rng::T) where {T <: AbstractRNG}
+    # We use a *single* RNG across threads and processors to ensure
+    # that e.g. different processors don't have different copies of the
+    # RNG.
+    channel = RemoteChannel(()->Channel{T}(1), 1)
+    put!(channel, rng)
+    return RandomSampler(channel)
+end
 
 function (s::RandomSampler)(ho, iter)
-    [list[rand(HO_RNG[threadid()], 1:length(list))] for list in ho.candidates]
+    rng = take!(s.rng_channel)
+    result = [list[rand(rng, 1:length(list))] for list in ho.candidates]
+    put!(s.rng_channel, rng)
+    return result
 end
 
 
