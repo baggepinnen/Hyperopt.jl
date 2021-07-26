@@ -7,6 +7,7 @@ Optionally, pass an `AbstractRNG` to initialize.
 """
 struct RandomSampler{T<:AbstractRNG} <: Sampler
     rng_channel::RemoteChannel{Channel{T}}
+    lock::ReentrantLock
 end
 
 RandomSampler() = RandomSampler(MersenneTwister(rand(1:1000)))
@@ -17,14 +18,18 @@ function RandomSampler(rng::T) where {T <: AbstractRNG}
     # RNG.
     channel = RemoteChannel(()->Channel{T}(1), 1)
     put!(channel, rng)
-    return RandomSampler(channel)
+    return RandomSampler(channel, ReentrantLock())
 end
 
 function (s::RandomSampler)(ho, iter)
-    rng = take!(s.rng_channel)
-    result = [list[rand(rng, 1:length(list))] for list in ho.candidates]
-    put!(s.rng_channel, rng)
-    return result
+    # Lock first, since RemoteChannel's may not be threadsafe:
+    # <https://github.com/JuliaLang/julia/issues/37706>
+    return lock(s.lock) do
+        rng = take!(s.rng_channel)
+        result = [list[rand(rng, 1:length(list))] for list in ho.candidates]
+        put!(s.rng_channel, rng)
+        return result
+    end
 end
 
 
