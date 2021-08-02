@@ -1,7 +1,7 @@
 module Hyperopt
 
 export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax
-export RandomSampler, LHSampler, CLHSampler, Continuous, Categorical, Hyperband, hyperband
+export RandomSampler, LHSampler, CLHSampler, Continuous, Categorical, Hyperband, hyperband, hyperoptim
 
 using Base.Threads: threadid, nthreads
 using LinearAlgebra, Statistics, Random
@@ -12,6 +12,7 @@ using RecipesBase
 using Distributed
 using LatinHypercubeSampling
 using ThreadPools
+using Requires
 
 const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
 
@@ -212,4 +213,9 @@ function printmax(ho::Hyperoptimizer)
 end
 
 include("plotting.jl")
+
+function __init__()
+    Requires.@require Optim="429524aa-4258-5aef-a3af-852621145aeb" include("optim.jl")
+end
+
 end # module
