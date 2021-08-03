@@ -18,7 +18,6 @@ Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 MultiKDE = "77543b7f-bd95-4024-91c1-46775346e0e7"
 
 [compat]
-Juno = "0.7, 0.8"
 LatinHypercubeSampling = "1.2"
 MacroTools = "0.5"
 MultiKDE = "0.1"
