@@ -30,29 +30,17 @@ using Optim
     end
 
     # extra robust option
-    @macroexpand @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=BOHB(dims=[UnorderedCategorical(5), Continuous(), Continuous()])),
-        algorithm = [SimulatedAnnealing(), ParticleSwarm(), NelderMead(), BFGS(), NewtonTrustRegion()],
-        a = LinRange(1,5,1800),
-        c = exp10.(LinRange(-1,3,1800))
-        if !(state === nothing)
-            a,c,algorithm = state
-        end
-        println(i, " algorithm: ", typeof(algorithm))
-        res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], algorithm, Optim.Options(time_limit=2i+2, show_trace=false, show_every=5))
-        Optim.minimum(res), (Optim.minimizer(res)..., algorithm)
-    end
-    
 
     ho = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=BOHB(dims=[UnorderedCategorical(5), Continuous(), Continuous()])),
         algorithm = [SimulatedAnnealing(), ParticleSwarm(), NelderMead(), BFGS(), NewtonTrustRegion()],
         a = LinRange(1,5,1800),
         c = exp10.(LinRange(-1,3,1800))
         if !(state === nothing)
-            a,c,algorithm = state
+            algorithm, a, c = state # should come in same order as they appear in the argument list above.
         end
         println(i, " algorithm: ", typeof(algorithm))
         res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], algorithm, Optim.Options(time_limit=2i+2, show_trace=false, show_every=5))
-        Optim.minimum(res), (Optim.minimizer(res)..., algorithm)
+        Optim.minimum(res), (algorithm, Optim.minimizer(res)...)
     end
 
 end

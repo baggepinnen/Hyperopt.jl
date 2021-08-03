@@ -195,13 +195,13 @@ hohb = @hyperopt for resources=50, sampler=Hyperband(R=50, η=3, inner=RandomSam
     a = LinRange(1,5,1800),
     c = exp10.(LinRange(-1,3,1800))
     if state !== nothing
-        x0,algorithm = state
+        algorithm, x0 = state
     else
         x0 = [a,c]
     end
     println(resources, " algorithm: ", typeof(algorithm).name.name)
     res = Optim.optimize(x->f(x[1],c=x[2]), x0, algorithm, Optim.Options(time_limit=resources+1, show_trace=false))
-    Optim.minimum(res), (Optim.minimizer(res), algorithm)
+    Optim.minimum(res), (algorithm, Optim.minimizer(res))
 end
 ```
 

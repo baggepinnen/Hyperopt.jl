@@ -116,7 +116,6 @@ function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=fal
             LTend = mapfun(t->costfun(rᵢ, t), T)
         end
         L, T = first.(LTend), last.(LTend)
-
         lock(l) do 
             append!(ho.history, T)
             append!(ho.results, L)
@@ -139,7 +138,7 @@ end
 function hyperband(f, candidates; R, η=3, inner = RandomSampler(), threads=false)
     sampler = Hyperband(; R, η, inner)
     objective(i, pars...) = f(i, [pars...]) # The objective needs two methods, accepting a vector and a list of args
-    objective(i, pars) = f(i, pars) 
+    objective(i, state) = f(i, state) 
     ho = Hyperoptimizer(;
         iterations = 1,
         params = [Symbol("$i") for i in eachindex(candidates)],
@@ -235,8 +234,6 @@ end
 
 # Update budget observations in BOHB
 function update_observations(ho::Hyperoptimizer{Hyperband}, rᵢ, observations, losses)
-    # history passed from hyperband is reversed, can not used for update
-    observations = reverse.(observations)
     bohb = ho.sampler.inner
     if !haskey(bohb.D, rᵢ)
         bohb.D[rᵢ] = []

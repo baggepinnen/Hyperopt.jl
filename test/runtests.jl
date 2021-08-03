@@ -5,7 +5,6 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
 
 @testset "Hyperopt" begin
 
-
     @testset "Random sampler" begin
         @info "Testing Random sampler"
 
