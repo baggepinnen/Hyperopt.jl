@@ -5,7 +5,7 @@ export RandomSampler, LHSampler, CLHSampler, hyperband, Hyperband, BOHB, Continu
 
 using Base.Threads: threadid, nthreads
 using LinearAlgebra, Statistics, Random
-using Juno
+using ProgressMeter
 using MacroTools
 using MacroTools: postwalk, prewalk
 using RecipesBase
@@ -123,12 +123,10 @@ end
 
 
 function optimize(ho::Hyperoptimizer)
-    Juno.progress() do id
-        for nt = ho
-            res = ho.objective(nt...)
-            push!(ho.results, res)
-            Base.CoreLogging.@logmsg Base.CoreLogging.BelowMinLevel "Hyperopt" progress=nt.i/ho.iterations  _id=id
-        end
+    @showprogress "Hyperoptimizing" for nt = ho
+        res = ho.objective(nt...)
+        push!(ho.results, res)
+        Base.CoreLogging.@logmsg Base.CoreLogging.BelowMinLevel "Hyperopt" progress=nt.i/ho.iterations  _id=id
     end
     ho
 end

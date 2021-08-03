@@ -79,39 +79,45 @@ function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false)
     hb.minimum = (Inf,)
     smax = floor(Int, log(η,R))
     B = (smax + 1)*R # B is budget
-    Juno.progress() do id
-        for s in smax:-1:0
+    l = ReentrantLock()
+    
+    p = Progress(smax+1, 1, "Hyperband")
+    Threads.@sync for s in smax:-1:0
+        # Threads.@spawn begin
             n = ceil(Int, (B/R)*((η^s)/(s+1)))
             r = R / (η^s)
-            minᵢ = successive_halving(ho, n, r, s; threads)
-            if minᵢ[1] < hb.minimum[1]
-                hb.minimum = minᵢ
+            minᵢ = successive_halving(ho, n, r, s; threads, l)
+            lock(l) do
+                if minᵢ[1] < hb.minimum[1]
+                    hb.minimum = minᵢ
+                end
             end
-            Base.CoreLogging.@logmsg -1 "Hyperband" progress=(smax-s)+1/(smax+1)  _id=id
-        end
+            ProgressMeter.next!(p; showvalues = [("bracket (of $(smax+1))",smax-s+1), ("minimum", hb.minimum[1]), ("with resources", hb.minimum[2]), ("minizer", hb.minimum[3])])
+            Base.CoreLogging.@logmsg -1 "Hyperband" progress=(smax-s)+1/(smax+1)
+        # end
     end
     return hb.minimum
 end
 
 
-function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=false)
+function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=false, l=ReentrantLock())
     hb = ho.sampler
     costfun = ho.objective
     η = hb.η
     minimum = Inf
     T = [ hb.inner(ho, i) for i=1:n ]
     mapfun = threads ? ThreadPools.tmap : map
-    Juno.progress() do id
-        for i in 0:s
-            nᵢ = n/(η^i) # Flooring takes place below 
-            rᵢ = r*(η^i) 
-            if i == 0
-                LTend = mapfun(t->costfun(rᵢ, t...), T)
-            else
-                LTend = mapfun(t->costfun(rᵢ, t), T)
-            end
-            L, T = first.(LTend), last.(LTend)
+    for i in 0:s
+        nᵢ = n/(η^i) # Flooring takes place below 
+        rᵢ = r*(η^i) 
+        if i == 0
+            LTend = mapfun(t->costfun(rᵢ, t...), T)
+        else
+            LTend = mapfun(t->costfun(rᵢ, t), T)
+        end
+        L, T = first.(LTend), last.(LTend)
 
+        lock(l) do 
             append!(ho.history, T)
             append!(ho.results, L)
             if hb.inner isa BOHB
@@ -123,8 +129,8 @@ function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=fal
                 minimum = (L[besti], rᵢ, T[besti])
             end
             T = T[perm[1:floor(Int,nᵢ/η)]]
-            Base.CoreLogging.@logmsg -1 "successive_halving" progress=i/s  _id=id
         end
+        Base.CoreLogging.@logmsg -1 "successive_halving" progress=i/s
     end
     return minimum
 end
