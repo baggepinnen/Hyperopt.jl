@@ -113,7 +113,7 @@ function preprocess_expression(ex)
             $(esc(state_))
             $(esc(ex.args[2]))
         end
-        function $(funname)($(esc(:i)), $(esc(:state)))
+        function $(funname)($(esc(params[1])), $(esc(:state)))
             $(esc(ex.args[2]))
         end
     end
@@ -132,9 +132,11 @@ function optimize(ho::Hyperoptimizer)
 end
 
 function create_ho(params, candidates, sampler, ho_, objective_)
+    esccands = esc.(candidates)
+    allcands = Expr(:tuple, esccands...)
     quote
         objective, iters = $(objective_), $(esc(candidates[1]))
-        ho = Hyperoptimizer(; iterations = iters, params = $(esc(params[2:end])), candidates = $(Expr(:tuple, esc.(candidates[2:end])...)), sampler=$(esc(sampler)), objective)
+        ho = Hyperoptimizer(; iterations = iters, params = $(esc(params))[2:end], candidates = $(allcands)[2:end], sampler=$(esc(sampler)), objective)
         if $(esc(ho_)) isa Hyperoptimizer # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
             ho.sampler = $(esc(ho_)).sampler
             ho.history = $(esc(ho_)).history # it's important to use the same array, not copy.
@@ -142,7 +144,7 @@ function create_ho(params, candidates, sampler, ho_, objective_)
         else
             s = ho.sampler
             if s isa Hyperband
-                ho.iterations = length($(esc(candidates[2])))
+                ho.iterations = length($(esc(candidates[end])))
                 s = s.inner
             end
             s isa Union{LHSampler,CLHSampler} && init!(s, ho)

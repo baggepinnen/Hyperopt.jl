@@ -21,7 +21,7 @@ function init!(s::LHSampler, ho)
     s.samples != zeros(0,0) && return # Already initialized
     ndims = length(ho.candidates)
     all(length(c) == ho.iterations for c in ho.candidates) ||
-        throw(ArgumentError("Latin hypercube sampling requires all candidate vectors to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, length.(ho.candidates))))) with $(ho.iterations) iterations"))
+        throw(ArgumentError("Latin hypercube sampling requires all candidate vectors to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, [length(c) for c in ho.candidates]))))) with $(ho.iterations) iterations"))
         s.iters == -1 && (s.iters = (1000*100*2)÷ho.iterations÷ndims)
     X, fit = LHCoptim(ho.iterations,ndims,s.iters)
     s.samples = copy(X')
@@ -149,6 +149,10 @@ function hyperband(f, candidates; R, η=3, inner = RandomSampler(), threads=fals
         sampler,
         objective,
     )
+    if inner isa Union{LHSampler,CLHSampler}
+        ho.iterations = length(candidates[1])
+        init!(inner, ho)
+    end
     hyperband(ho; threads)
     ho
 end
