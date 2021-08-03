@@ -11,7 +11,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
 
         # res = map(1:30) do i
         #     @info("Iteration ", i)
-        hor = @hyperopt for i=100, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
+        hor = @hyperopt for r=100, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
@@ -131,12 +131,12 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         # res = map(1:30) do i
         #     @info("Iteration ", i)
         @test_nowarn Hyperband(50)
-        let hohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+        let hohb = @hyperopt for r=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
                 # println(i, "\t", a, "\t", b, "\t", c)
                 if !(state === nothing)
                     a,c = state
                 end
-                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, i)))
+                res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=floor(Int, r)))
                 Optim.minimum(res), Optim.minimizer(res)
             end
             @test length(hohb.history) == 69
@@ -153,7 +153,6 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             @test length(hohb.history) == 138
             @test length(hohb.results) == 138
         end
-
         # Special logic for the LHsampler as inner
         let hohb = @hyperopt for i=18, sampler=Hyperband(R=30, η=10, inner=LHSampler()), a = LinRange(1,5,300), c = exp10.(LinRange(-1,3,300))
                 # println(i, "\t", a, "\t", b, "\t", c)
