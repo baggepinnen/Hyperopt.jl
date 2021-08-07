@@ -197,7 +197,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             if !(state === nothing)
                 a,c,algorithm = state
             end
-            println(i, " algorithm: ", typeof(algorithm))
+            # println(i, " algorithm: ", typeof(algorithm))
             res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], algorithm, Optim.Options(time_limit=2i+2, show_trace=false, show_every=5))
             Optim.minimum(res), (Optim.minimizer(res)..., algorithm)
         end
@@ -217,6 +217,13 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @test hohb.minimum < 100.1
         @test hohb.minimizer ≈ [3, 100] rtol = 1e-2
         @test hohb.params == [:a, :c]
+
+
+        g(a, c) = sum(@. 100 + (a-3)^2 + (c-100)^2)
+        ho = hyperoptim(x->g(x...), candidates, Rmin=1, verbose=false, threads=false)
+        @test ho.minimum < 100.1
+        @test ho.minimizer ≈ [3, 100] rtol = 1e-2
+        @test ho.params == [:a, :c]
 
         # test that hyperband can be placed inside a function
         function run_hyperband()
