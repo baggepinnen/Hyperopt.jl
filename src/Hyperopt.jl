@@ -38,10 +38,10 @@ Base.@kwdef mutable struct Hyperoptimizer{S<:Sampler, F}
 end
 
 function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
-    s === :minimum && (return minimum(replace(ho.results, NaN => Inf)))
-    s === :minimizer && (return ho.history[argmin(replace(ho.results, NaN => Inf))])
-    s === :maximum && (return maximum(replace(ho.results, NaN => Inf)))
-    s === :maximizer && (return ho.history[argmax(replace(ho.results, NaN => Inf))])
+    s === :minimum && (return isempty(ho.results) ? NaN :  minimum(replace(ho.results, NaN => Inf)))
+    s === :minimizer && (return isempty(ho.results) ? [] :  ho.history[argmin(replace(ho.results, NaN => Inf))])
+    s === :maximum && (return isempty(ho.results) ? NaN :  maximum(replace(ho.results, NaN => Inf)))
+    s === :maximizer && (return isempty(ho.results) ? [] :  ho.history[argmax(replace(ho.results, NaN => Inf))])
     return getfield(ho,s)
 end
 
