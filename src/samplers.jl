@@ -112,28 +112,22 @@ function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false)
     hb.minimum = (Inf,)
     smax = floor(Int, log(η,R))
     B = (smax + 1)*R # B is budget
-    l = ReentrantLock()
     
     p = Progress(smax+1, 1, "Hyperband")
-    Threads.@sync for s in smax:-1:0
-        # Threads.@spawn begin
-            n = ceil(Int, (B/R)*((η^s)/(s+1)))
-            r = R / (η^s)
-            minᵢ = successive_halving(ho, n, r, s; threads, l)
-            lock(l) do
-                if minᵢ[1] < hb.minimum[1]
-                    hb.minimum = minᵢ
-                end
-            end
-            ProgressMeter.next!(p; showvalues = [("bracket (of $(smax+1))",smax-s+1), ("minimum", hb.minimum[1]), ("with resources", hb.minimum[2]), ("minizer", hb.minimum[3])])
-            Base.CoreLogging.@logmsg -1 "Hyperband" progress=(smax-s)+1/(smax+1)
-        # end
+    for s in smax:-1:0
+        n = ceil(Int, (B/R)*((η^s)/(s+1)))
+        r = R / (η^s)
+        minᵢ = successive_halving(ho, n, r, s; threads)
+        if minᵢ[1] < hb.minimum[1]
+            hb.minimum = minᵢ
+        end
+        ProgressMeter.next!(p; showvalues = [("bracket (of $(smax+1))",smax-s+1), ("minimum", hb.minimum[1]), ("with resources", hb.minimum[2]), ("minizer", hb.minimum[3])])
     end
     return hb.minimum
 end
 
 
-function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=false, l=ReentrantLock())
+function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=false)
     hb = ho.sampler
     costfun = ho.objective
     η = hb.η
@@ -149,19 +143,17 @@ function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=fal
             LTend = mapfun(t->costfun(rᵢ, t), T)
         end
         L, T = first.(LTend), last.(LTend)
-        lock(l) do 
-            append!(ho.history, T)
-            append!(ho.results, L)
-            if hb.inner isa BOHB
-                update_observations(ho, rᵢ, T, L)
-            end
-            perm = sortperm(L)
-            besti = perm[1]
-            if L[besti] < minimum[1]
-                minimum = (L[besti], rᵢ, T[besti])
-            end
-            T = T[perm[1:floor(Int,nᵢ/η)]]
+        append!(ho.history, T)
+        append!(ho.results, L)
+        if hb.inner isa BOHB
+            update_observations(ho, rᵢ, T, L)
         end
+        perm = sortperm(L)
+        besti = perm[1]
+        if L[besti] < minimum[1]
+            minimum = (L[besti], rᵢ, T[besti])
+        end
+        T = T[perm[1:floor(Int,nᵢ/η)]]
         Base.CoreLogging.@logmsg -1 "successive_halving" progress=i/s
     end
     return minimum
