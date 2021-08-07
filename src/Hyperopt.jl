@@ -13,6 +13,7 @@ using Distributed
 using LatinHypercubeSampling
 using ThreadPools
 using Requires
+using Printf
 
 const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
 
@@ -33,6 +34,31 @@ function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
     s === :maximum && (return maximum(replace(ho.results, NaN => Inf)))
     s === :maximizer && (return ho.history[argmax(replace(ho.results, NaN => Inf))])
     return getfield(ho,s)
+end
+
+function Base.show(io::IO, ho::Hyperoptimizer)
+    println(io, "Hyperoptimizer with")
+    cands = ho.candidates
+    candstring = map(keys(cands)) do k
+        s = "  "*string(k)*" length: "
+        if length(cands[k]) <= 3
+            s*string(cands[k])
+        else
+            s*string(length(cands[k]))
+        end
+    end
+    candstring = join(candstring, "\n")
+    println(io, candstring)
+    println(io, "  minimum / maximum: $((ho.minimum, ho.maximum))")
+    println(io, "  minimizer:")
+    for (i, v) in enumerate(ho.minimizer)
+        @printf(io, "%9s ", string(ho.params[i]))
+    end
+    println(io)
+    for (i, v) in enumerate(ho.minimizer)
+        @printf(io, "%9.4g ", v)
+    end
+    println()
 end
 
 Base.propertynames(ho::Hyperoptimizer) = (:minimum, :minimizer, :maximum, :maximizer, fieldnames(Hyperoptimizer)...)
