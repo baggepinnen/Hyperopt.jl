@@ -1,6 +1,6 @@
 module Hyperopt
 
-export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax
+export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax, warn_on_boundary
 export RandomSampler, LHSampler, CLHSampler, Continuous, Categorical, Hyperband, hyperband, hyperoptim
 
 using Base.Threads: threadid, nthreads
@@ -209,6 +209,35 @@ end
 function printmax(ho::Hyperoptimizer)
     for (param, value) in zip(ho.params, ho.maximizer)
         println(param, " = ", value)
+    end
+end
+
+"""
+    warn_on_boundary(ho, sense = :min)
+
+Prints a warning message for each parameter where the optimum was obtained on an extreme point of the sampled space.
+
+Example: If parameter `a` can take values in 1:10 and the optimum was obtained at
+`a = 1`, it's an indication that the parameter was constraind by the search space.
+The warning is effective even if the lowest value of `a` that was sampled was higher than 1,
+but the optimum occured on the lowest sampled value.
+"""
+function warn_on_boundary(ho, sense = :min)
+    m = sense == :min ? ho.minimizer : ho.maximizer
+    n_params = length(m)
+    extremas = map(1:n_params) do i
+        c = ho.candidates[i]
+        if c isa AbstractArray{<:Real} 
+            extrema(getindex.(ho.history, i))
+        else
+            (m[i],)
+        end
+    end
+    for i in eachindex(m)
+        c = unique(ho.candidates[i])
+        if m[i] ∈ extremas[i] && length(c) > 3
+            println("Parameter $(ho.params[i]) obtained its optimum on an extremum of the sampled region: $(m[i])")
+        end
     end
 end
 
