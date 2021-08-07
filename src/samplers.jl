@@ -94,7 +94,15 @@ end
 Hyperband(R) = Hyperband(R=R)
 
 function optimize(ho::Hyperoptimizer{<:Hyperband})
-    hyperband(ho)
+    try
+        hyperband(ho)
+    catch e
+        if e isa InterruptException
+            @info "Aborting hyperband"
+        else
+            rethrow(e)
+        end
+    end
     ho
 end
 

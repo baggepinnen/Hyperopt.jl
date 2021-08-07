@@ -1,7 +1,7 @@
 module Hyperopt
 
-export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax
-export RandomSampler, LHSampler, CLHSampler, hyperband, Hyperband, BOHB, Continuous, Categorical, UnorderedCategorical
+export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax, warn_on_boundary
+export RandomSampler, LHSampler, CLHSampler, hyperband, Hyperband, hyperoptim, BOHB, Continuous, Categorical, UnorderedCategorical
 
 using Base.Threads: threadid, nthreads
 using LinearAlgebra, Statistics, Random
@@ -14,6 +14,8 @@ using LatinHypercubeSampling
 using ThreadPools
 using Distributions: Normal, truncated
 using MultiKDE
+using Requires
+using Printf
 
 const DimensionType = LHCDimension
 
@@ -41,6 +43,31 @@ function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
     s === :maximum && (return maximum(replace(ho.results, NaN => Inf)))
     s === :maximizer && (return ho.history[argmax(replace(ho.results, NaN => Inf))])
     return getfield(ho,s)
+end
+
+function Base.show(io::IO, ho::Hyperoptimizer)
+    println(io, "Hyperoptimizer with")
+    cands = ho.candidates
+    candstring = map(keys(cands)) do k
+        s = "  "*string(k)*" length: "
+        if length(cands[k]) <= 3
+            s*string(cands[k])
+        else
+            s*string(length(cands[k]))
+        end
+    end
+    candstring = join(candstring, "\n")
+    println(io, candstring)
+    println(io, "  minimum / maximum: $((ho.minimum, ho.maximum))")
+    println(io, "  minimizer:")
+    for (i, v) in enumerate(ho.minimizer)
+        @printf(io, "%9s ", string(ho.params[i]))
+    end
+    println(io)
+    for (i, v) in enumerate(ho.minimizer)
+        @printf(io, "%9.4g ", v)
+    end
+    println()
 end
 
 Base.propertynames(ho::Hyperoptimizer) = (:minimum, :minimizer, :maximum, :maximizer, fieldnames(Hyperoptimizer)...)
@@ -121,10 +148,17 @@ end
 
 
 function optimize(ho::Hyperoptimizer)
-    @showprogress "Hyperoptimizing" for nt = ho
-        res = ho.objective(nt...)
-        push!(ho.results, res)
-        Base.CoreLogging.@logmsg Base.CoreLogging.BelowMinLevel "Hyperopt" progress=nt.i/ho.iterations  _id=id
+    try
+        @showprogress "Hyperoptimizing" for nt = ho
+            res = ho.objective(nt...)
+            push!(ho.results, res)
+        end
+    catch e
+        if e isa InterruptException
+            @info "Aborting hyperoptimization"
+        else
+            rethrow(e)
+        end
     end
     ho
 end
@@ -220,5 +254,39 @@ function printmax(ho::Hyperoptimizer)
     end
 end
 
+"""
+    warn_on_boundary(ho, sense = :min)
+
+Prints a warning message for each parameter where the optimum was obtained on an extreme point of the sampled space.
+
+Example: If parameter `a` can take values in 1:10 and the optimum was obtained at
+`a = 1`, it's an indication that the parameter was constraind by the search space.
+The warning is effective even if the lowest value of `a` that was sampled was higher than 1,
+but the optimum occured on the lowest sampled value.
+"""
+function warn_on_boundary(ho, sense = :min)
+    m = sense == :min ? ho.minimizer : ho.maximizer
+    n_params = length(m)
+    extremas = map(1:n_params) do i
+        c = ho.candidates[i]
+        if c isa AbstractArray{<:Real} 
+            extrema(getindex.(ho.history, i))
+        else
+            (m[i],)
+        end
+    end
+    for i in eachindex(m)
+        c = unique(ho.candidates[i])
+        if m[i] ∈ extremas[i] && length(c) > 3
+            println("Parameter $(ho.params[i]) obtained its optimum on an extremum of the sampled region: $(m[i])")
+        end
+    end
+end
+
 include("plotting.jl")
+
+function __init__()
+    Requires.@require Optim="429524aa-4258-5aef-a3af-852621145aeb" include("optim.jl")
+end
+
 end # module
