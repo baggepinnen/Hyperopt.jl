@@ -83,6 +83,18 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
+
+        how = @hyperopt for i=10, a = LinRange(1,5,10), b = repeat([true, false],50)
+            a
+        end
+        f, io = mktemp()
+        redirect_stdout(io) do
+            warn_on_boundary(how)
+        end
+        close(io)
+        text = read(f, String)
+        @test  occursin("Parameter a obtained its optimum on an extremum of the sampled region", text)
+        @test !occursin("Parameter b", text)
     end
 
     #     minimum.((hor,hob,hot,hof))
