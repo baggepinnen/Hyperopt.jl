@@ -113,11 +113,16 @@ end
 
 
 function optimize(ho::Hyperoptimizer)
-    Juno.progress() do id
+    try
         for nt = ho
             res = ho.objective(nt...)
             push!(ho.results, res)
-            Base.CoreLogging.@logmsg Base.CoreLogging.BelowMinLevel "Hyperopt" progress=nt.i/ho.iterations  _id=id
+        end
+    catch e
+        if e isa InterruptException
+            @info "Aborting hyperoptimization"
+        else
+            rethrow(e)
         end
     end
     ho
