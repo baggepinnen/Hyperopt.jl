@@ -14,6 +14,7 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
+        show(hor)
         @test minimum(hor) < 300
         @test maximum(hor) > 300
         @test length(hor.history) == 100
@@ -110,10 +111,12 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
         @info "Testing Manual"
 
         ho = Hyperoptimizer(10, a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
+        show(ho)
         for (i,a,b,c) in ho
             println(i, "\t", a, "\t", b, "\t", c)
         end
         @test length(ho) == 10
+        show(ho)
 
         ho = Hyperoptimizer(10, a = range(1, stop=2, length=50), b = [true, false], c = randn(100))
         for vals in ho
