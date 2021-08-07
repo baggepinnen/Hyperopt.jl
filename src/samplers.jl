@@ -1,10 +1,35 @@
 """
-Sample a value For each parameter uniformly at random from the candidate vectors. Log-uniform sampling available by providing a log-spaced candidate vector.
+    RandomSampler{T<:AbstractRNG} <: Sampler
+
+Sample a value for each parameter uniformly at random from the candidate vectors. Log-uniform sampling available by providing a log-spaced candidate vector.
+
+Optionally, pass an `AbstractRNG` to initialize.
 """
-struct RandomSampler <: Sampler end
+struct RandomSampler{T<:AbstractRNG} <: Sampler
+    rng_channel::RemoteChannel{Channel{T}}
+    lock::ReentrantLock
+end
+
+RandomSampler() = RandomSampler(MersenneTwister(rand(1:1000)))
+
+function RandomSampler(rng::T) where {T <: AbstractRNG}
+    # We use a *single* RNG across threads and processors to ensure
+    # that e.g. different processors don't have different copies of the
+    # RNG.
+    channel = RemoteChannel(()->Channel{T}(1), 1)
+    put!(channel, rng)
+    return RandomSampler(channel, ReentrantLock())
+end
 
 function (s::RandomSampler)(ho, iter)
-    [list[rand(HO_RNG[threadid()], 1:length(list))] for list in ho.candidates]
+    # Lock first, since RemoteChannel's may not be threadsafe:
+    # <https://github.com/JuliaLang/julia/issues/37706>
+    return lock(s.lock) do
+        rng = take!(s.rng_channel)
+        result = [list[rand(rng, 1:length(list))] for list in ho.candidates]
+        put!(s.rng_channel, rng)
+        return result
+    end
 end
 
 

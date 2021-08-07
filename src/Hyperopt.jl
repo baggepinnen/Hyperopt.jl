@@ -15,8 +15,6 @@ using ThreadPools
 using Distributions: Normal, truncated
 using MultiKDE
 
-const HO_RNG = [MersenneTwister(rand(1:1000)) for _ in 1:nthreads()]
-
 const DimensionType = LHCDimension
 
 # # Types of dimensions
