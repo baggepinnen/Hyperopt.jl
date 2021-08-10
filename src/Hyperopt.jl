@@ -206,6 +206,12 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
                 $(Expr(:tuple, esc.(params)...)), _ = iterate(ho, i)
                 res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
 
+                # Here, we update `new_history` (which lives on the manager node thanks to the `RemoteChannel`)
+                # from the worker nodes, so that we don't need to care about the result of pmap.
+                # Why? Because the previous design of returning both the loss and the parameters to collect
+                # and update the history with later would mean that if we pass a custom `on_error`, for example,
+                # it would need to return both a loss and the parameters to be added to the history later,
+                # and the user probably doesn't know they can't just pass a loss.
                 put!(new_history, (i, res, $(Expr(:tuple, esc.(params[2:end])...))))
                 res
             end
