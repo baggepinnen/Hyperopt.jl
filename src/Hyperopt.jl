@@ -86,10 +86,10 @@ end
 Base.length(ho::Hyperoptimizer) = ho.iterations
 
 
-function Base.iterate(ho::Hyperoptimizer, state=1)
+function Base.iterate(ho::Hyperoptimizer, state=1; update_history=true)
     state > ho.iterations && return nothing
     samples = ho.sampler(ho, state)
-    push!(ho.history, samples)
+    update_history && push!(ho.history, samples)
     nt = (; Pair.((:i, ho.params...), (state, samples...))...)
     nt, state+1
 end
@@ -195,37 +195,47 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
     quote
         function workaround_function()
             ho = $(ho_)
-            # Getting the history right is tricky when using workers. The approach I've found to work is to
-            # save the actual array (not copy) in hist, temporarily use a channel that will later be discarded
-            # reassign the original array and then append the new history. If a new array is used, the change will not be visible in the original hyperoptimizer
-            hist = ho.history
-            ho.history = []
 
-            new_history = RemoteChannel(() -> Channel(ho.iterations), 1)
+            # We use a `RemoteChannel` to coordinate access to a single Hyperoptimizer object
+            # that lives on the manager process.
+            ho_channel = RemoteChannel(() -> Channel{Hyperoptimizer}(1), 1)
+            put!(ho_channel, ho)
+
+            # We don't care about the results of the `pmap` since we update the hyperoptimizer
+            # inside the loop.
             $(esc(pmap))(1:ho.iterations) do i
-                $(Expr(:tuple, esc.(params)...)), _ = iterate(ho, i)
+                # We take the hyperoptimizer out of the channel, and get our new parameter values
+                local_ho = take!(ho_channel)
+                # We use `update_history` because we want to only update the history once we've
+                # finished the iteration and have a result to report back as well. Otherwise,
+                # some processes may observe the Hyperoptimizer in an inconsistent state with
+                # `length(ho.history) > length(ho.results)`. Moreover, if one run is very quick
+                # the history and results could become out of order with respect to one another.
+                $(Expr(:tuple, esc.(params)...)), _ = iterate(local_ho, i; update_history = false)
+                # Now we put it back so another processor can use the hyperoptimizer
+                put!(ho_channel, local_ho)
+
+                # Now run the objective
                 res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
 
-                # Here, we update `new_history` (which lives on the manager node thanks to the `RemoteChannel`)
-                # from the worker nodes, so that we don't need to care about the result of pmap.
-                # Why? Because the previous design of returning both the loss and the parameters to collect
-                # and update the history with later would mean that if we pass a custom `on_error`, for example,
-                # it would need to return both a loss and the parameters to be added to the history later,
-                # and the user probably doesn't know they can't just pass a loss.
-                put!(new_history, (i, res, $(Expr(:tuple, esc.(params[2:end])...))))
+                # Now update the results; we again grab the one true hyperoptimizer,
+                # and populate it's history and result.
+                local_ho = take!(ho_channel)
+                push!(local_ho.history, $(Expr(:tuple, esc.(params[2:end])...)))
+                push!(local_ho.results, res)
+                put!(ho_channel, local_ho)
+
                 res
             end
-            ho.history = hist
 
-            results = []
-            while isready(new_history)
-                push!(results, take!(new_history))
-            end
-            close(new_history)
+            # What we get out of the channel is an updated copy of our original hyperoptimizer.
+            # So now, back on the manager process, we take it out one last time and update
+            # the original hyperoptimizer.
+            updated_ho = take!(ho_channel)
+            close(ho_channel)
+            ho.history = updated_ho.history
+            ho.results = updated_ho.results
 
-            sort!(results; by=first)
-            append!(ho.results, getindex.(results,2))
-            append!(ho.history, getindex.(results,3)) # history automatically appended by the iteration
             ho
         end
         workaround_function()
