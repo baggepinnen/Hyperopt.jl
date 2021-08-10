@@ -3,6 +3,12 @@ Random.seed!(0)
 using Hyperopt, Plots
 f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This function must be defined outside testsets to avoid scoping issues
 
+# Use a separate module to test for escaping issues
+module MyPmapModule
+    using Distributed
+    my_pmap(args...) = Distributed.pmap(args...; on_error=identity)
+end
+
 @testset "Hyperopt" begin
 
     @testset "Random sampler" begin
@@ -295,6 +301,15 @@ f(a,b=true;c=10) = sum(@. 100 + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # This func
             f(horp.history[i][1:2]..., c=horp.history[i][3]) == horp.results[i]
         end
 
+        # Test with a custom pmap
+        horp = @phyperopt for i=300, sampler=RandomSampler(), a = LinRange(1,5,50), b = [true, false], c = exp10.(LinRange(-1,3,50))
+            # println(i, "\t", a, "\t", b, "\t", c)
+            i > 100 && error("Too many iterations")
+            f(a,b,c=c)
+        end MyPmapModule.my_pmap
+        # we can't handle errors in the history or results
+        @test length(horp.history) == 100
+        @test length(horp.results) == 100 
 
     end
     @testset "BOHB" begin

@@ -157,7 +157,7 @@ function optimize(ho::Hyperoptimizer)
         if e isa InterruptException
             @info "Aborting hyperoptimization"
         else
-            rethrow(e)
+            rethrow()
         end
     end
     ho
@@ -196,19 +196,30 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
         function workaround_function()
             ho = $(ho_)
             # Getting the history right is tricky when using workers. The approach I've found to work is to
-            # save the actual array (not copy) in hist, temporarily use a new array that will later be discarded
+            # save the actual array (not copy) in hist, temporarily use a channel that will later be discarded
             # reassign the original array and then append the new history. If a new array is used, the change will not be visible in the original hyperoptimizer
             hist = ho.history
             ho.history = []
-            res = $(pmap)(1:ho.iterations) do i
-                $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
+
+            new_history = RemoteChannel(() -> Channel(ho.iterations), 1)
+            $(esc(pmap))(1:ho.iterations) do i
+                $(Expr(:tuple, esc.(params)...)), _ = iterate(ho, i)
                 res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
 
-                res, $(Expr(:tuple, esc.(params[2:end])...))
+                put!(new_history, (i, res, $(Expr(:tuple, esc.(params[2:end])...))))
+                res
             end
             ho.history = hist
-            append!(ho.results, getindex.(res,1))
-            append!(ho.history, getindex.(res,2)) # history automatically appended by the iteration
+
+            results = []
+            while isready(new_history)
+                push!(results, take!(new_history))
+            end
+            close(new_history)
+
+            sort!(results; by=first)
+            append!(ho.results, getindex.(results,2))
+            append!(ho.history, getindex.(results,3)) # history automatically appended by the iteration
             ho
         end
         workaround_function()
@@ -218,10 +229,10 @@ end
 """
 Same as `@hyperopt` but uses `Distributed.pmap` for parallel evaluation of the cost function.
 """
-macro phyperopt(ex)
+macro phyperopt(ex, pmap=pmap)
     pre = preprocess_expression(ex)
     ho_ = create_ho(pre...)
-    pmacrobody(ex, pre[1], ho_)
+    pmacrobody(ex, pre[1], ho_, pmap)
 end
 
 """
