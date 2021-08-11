@@ -233,8 +233,14 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
             # the original hyperoptimizer.
             updated_ho = take!(ho_channel)
             close(ho_channel)
-            ho.history = updated_ho.history
-            ho.results = updated_ho.results
+
+            # Getting the history right is tricky. For some reason, we can't do `ho.history = updated_ho.history`.
+            # Instead, we must mutate the existing `ho.history` vector. (Similarly for results).
+            empty!(ho.history)
+            append!(ho.history, updated_ho.history)
+
+            empty!(ho.results)
+            append!(ho.results, updated_ho.results)
 
             ho
         end

@@ -252,6 +252,5 @@ end
 
 # Parallel execution
 - The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.
-  - `@phyperopt` currently does not update its history while iterating. Therefore samplers which rely on the history won't work correctly.
   - `@phyperopt` accepts an optional second argument which is a `pmap`-like function. E.g. `(args...,) -> pmap(args...; on_error=...)`.
 - The macro `@thyperopt` uses `ThreadPools.tmap` to evaluate the objective on all available threads. Beware of high memory consumption if your objective allocates a lot of memory.
