@@ -199,7 +199,11 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
             # We use a `RemoteChannel` to coordinate access to a single Hyperoptimizer object
             # that lives on the manager process.
             ho_channel = RemoteChannel(() -> Channel{Hyperoptimizer}(1), 1)
-            put!(ho_channel, ho)
+
+            # We use a `deepcopy` to ensure we get the same semantics whether or not the code
+            # ends up executing on a remote process or not (i.e. always a copy). See
+            # <https://docs.julialang.org/en/v1/manual/distributed-computing/#Local-invocations>
+            put!(ho_channel, deepcopy(ho))
 
             # We don't care about the results of the `pmap` since we update the hyperoptimizer
             # inside the loop.
