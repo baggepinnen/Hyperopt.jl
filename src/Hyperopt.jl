@@ -133,13 +133,18 @@ function preprocess_expression(ex)
     params = (params...,)
     funname = gensym(:hyperopt_objective)
     state_ = :(state = nothing)
+    body = ex.args[2]
+    # remove trailing LineNumberNodes from loop body as to not just return `nothing`, ref https://github.com/JuliaLang/julia/pull/41857
+    if Meta.isexpr(body, :block) && body.args[end] isa LineNumberNode
+        resize!(body.args, length(body.args) - 1)
+    end
     fun = quote # produces a function(i, pars...)
         function $(funname)($(Expr(:tuple, esc.(params)...))...)
             $(esc(state_))
-            $(esc(ex.args[2]))
+            $(esc(body))
         end
         function $(funname)($(esc(params[1])), $(esc(:state)))
-            $(esc(ex.args[2]))
+            $(esc(body))
         end
     end
 
