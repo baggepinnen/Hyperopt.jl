@@ -65,7 +65,11 @@ function Base.show(io::IO, ho::Hyperoptimizer)
     end
     println(io)
     for (i, v) in enumerate(ho.minimizer)
-        @printf(io, "%9.4g ", v)
+        if v isa Number
+            @printf(io, "%9.4g ", v)
+        else
+            @printf(io, "%9s ", v)
+        end
     end
     println()
 end
