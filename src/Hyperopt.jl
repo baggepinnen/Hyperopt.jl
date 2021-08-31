@@ -90,10 +90,10 @@ end
 Base.length(ho::Hyperoptimizer) = ho.iterations
 
 
-function Base.iterate(ho::Hyperoptimizer, state=1)
+function Base.iterate(ho::Hyperoptimizer, state=1; update_history=true)
     state > ho.iterations && return nothing
     samples = ho.sampler(ho, state)
-    push!(ho.history, samples)
+    update_history && push!(ho.history, samples)
     nt = (; Pair.((:i, ho.params...), (state, samples...))...)
     nt, state+1
 end
@@ -166,7 +166,7 @@ function optimize(ho::Hyperoptimizer)
         if e isa InterruptException
             @info "Aborting hyperoptimization"
         else
-            rethrow(e)
+            rethrow()
         end
     end
     ho
@@ -204,20 +204,57 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
     quote
         function workaround_function()
             ho = $(ho_)
-            # Getting the history right is tricky when using workers. The approach I've found to work is to
-            # save the actual array (not copy) in hist, temporarily use a new array that will later be discarded
-            # reassign the original array and then append the new history. If a new array is used, the change will not be visible in the original hyperoptimizer
-            hist = ho.history
-            ho.history = []
-            res = $(pmap)(1:ho.iterations) do i
-                $(Expr(:tuple, esc.(params)...)),_ = iterate(ho,i)
+
+            # We use a `RemoteChannel` to coordinate access to a single Hyperoptimizer object
+            # that lives on the manager process.
+            ho_channel = RemoteChannel(() -> Channel{Hyperoptimizer}(1), 1)
+
+            # We use a `deepcopy` to ensure we get the same semantics whether or not the code
+            # ends up executing on a remote process or not (i.e. always a copy). See
+            # <https://docs.julialang.org/en/v1/manual/distributed-computing/#Local-invocations>
+            put!(ho_channel, deepcopy(ho))
+
+            # We don't care about the results of the `pmap` since we update the hyperoptimizer
+            # inside the loop.
+            $(esc(pmap))(1:ho.iterations) do i
+                # We take the hyperoptimizer out of the channel, and get our new parameter values
+                local_ho = take!(ho_channel)
+                # We use `update_history` because we want to only update the history once we've
+                # finished the iteration and have a result to report back as well. Otherwise,
+                # some processes may observe the Hyperoptimizer in an inconsistent state with
+                # `length(ho.history) > length(ho.results)`. Moreover, if one run is very quick
+                # the history and results could become out of order with respect to one another.
+                $(Expr(:tuple, esc.(params)...)), _ = iterate(local_ho, i; update_history = false)
+                # Now we put it back so another processor can use the hyperoptimizer
+                put!(ho_channel, local_ho)
+
+                # Now run the objective
                 res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
 
-                res, $(Expr(:tuple, esc.(params[2:end])...))
+                # Now update the results; we again grab the one true hyperoptimizer,
+                # and populate it's history and result.
+                local_ho = take!(ho_channel)
+                push!(local_ho.history, $(Expr(:tuple, esc.(params[2:end])...)))
+                push!(local_ho.results, res)
+                put!(ho_channel, local_ho)
+
+                res
             end
-            ho.history = hist
-            append!(ho.results, getindex.(res,1))
-            append!(ho.history, getindex.(res,2)) # history automatically appended by the iteration
+
+            # What we get out of the channel is an updated copy of our original hyperoptimizer.
+            # So now, back on the manager process, we take it out one last time and update
+            # the original hyperoptimizer.
+            updated_ho = take!(ho_channel)
+            close(ho_channel)
+
+            # Getting the history right is tricky. For some reason, we can't do `ho.history = updated_ho.history`.
+            # Instead, we must mutate the existing `ho.history` vector. (Similarly for results).
+            empty!(ho.history)
+            append!(ho.history, updated_ho.history)
+
+            empty!(ho.results)
+            append!(ho.results, updated_ho.results)
+
             ho
         end
         workaround_function()
@@ -227,10 +264,10 @@ end
 """
 Same as `@hyperopt` but uses `Distributed.pmap` for parallel evaluation of the cost function.
 """
-macro phyperopt(ex)
+macro phyperopt(ex, pmap=pmap)
     pre = preprocess_expression(ex)
     ho_ = create_ho(pre...)
-    pmacrobody(ex, pre[1], ho_)
+    pmacrobody(ex, pre[1], ho_, pmap)
 end
 
 """
