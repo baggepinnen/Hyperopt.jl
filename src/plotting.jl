@@ -7,18 +7,35 @@ logscale(params) = false
     layout --> N
     for i = 1:N
         params = getindex.(ho.history, i)
-        perm = sortperm(params)
-        yguide --> "Function value"
-        seriestype --> :scatter
-        @series begin
-            xguide --> ho.params[i]
-            subplot --> i
-            label --> "Sampled points"
-            legend --> false
-            xscale --> (logscale(params) ? :log10 : :identity)
-            yscale --> (logscale(ho.results) ? :log10 : :identity)
-            params[perm], ho.results[perm]
+        if eltype(params) <: Real 
+            perm = sortperm(params) 
+            yguide --> "Function value"
+            seriestype --> :scatter
+            @series begin
+                xguide --> ho.params[i]
+                subplot --> i
+                label --> "Sampled points"
+                legend --> false
+                xscale --> (logscale(params) ? :log10 : :identity)
+                yscale --> (logscale(ho.results) ? :log10 : :identity)
+                params[perm], ho.results[perm]
+            end
+        else
+            params = Symbol.(params)
+            uniqueparams = sort(unique(params))
+            paramidxs = map(x -> findfirst(==(x), uniqueparams), params)
+            yguide --> "Function value"
+            seriestype --> :scatter
+            @series begin
+                xguide --> ho.params[i]
+                subplot --> i
+                label --> "Sampled points"
+                legend --> false
+                xticks --> (1:length(uniqueparams), uniqueparams)
+                xscale --> :identity
+                yscale --> (logscale(ho.results) ? :log10 : :identity)
+                paramidxs, ho.results
+            end
         end
-
     end
 end
