@@ -146,6 +146,7 @@ end
     end
 
     @testset "Hyperband" begin
+        @info "Testing Hyperband"
         using Optim
         f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
         # res = map(1:30) do i
@@ -315,5 +316,22 @@ end
     @testset "BOHB" begin
         @info "Testing BOHB"
         include("test_BOHB.jl")
+    end
+
+    @testset "Non-numerics" begin
+        @info "Testing optimizing over non-numeric elements"
+        hor = @hyperopt for i=100, g=[sin, exp, identity], x=LinRange(0,1,100)
+            g(x)
+        end
+        show(hor)
+        @test minimum(hor) < ℯ
+        @test maximum(hor) > 0
+        @test length(hor.history) == 100
+        @test length(hor.results) == 100
+        @test all(hor.history) do h
+            all(hi in hor.candidates[i] for (i,hi) in enumerate(h))
+        end
+
+        plot(hor)
     end
 end
