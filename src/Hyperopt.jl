@@ -214,31 +214,40 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
             # <https://docs.julialang.org/en/v1/manual/distributed-computing/#Local-invocations>
             put!(ho_channel, deepcopy(ho))
 
-            # We don't care about the results of the `pmap` since we update the hyperoptimizer
-            # inside the loop.
-            $(esc(pmap))(1:ho.iterations) do i
-                # We take the hyperoptimizer out of the channel, and get our new parameter values
-                local_ho = take!(ho_channel)
-                # We use `update_history` because we want to only update the history once we've
-                # finished the iteration and have a result to report back as well. Otherwise,
-                # some processes may observe the Hyperoptimizer in an inconsistent state with
-                # `length(ho.history) > length(ho.results)`. Moreover, if one run is very quick
-                # the history and results could become out of order with respect to one another.
-                $(Expr(:tuple, esc.(params)...)), _ = iterate(local_ho, i; update_history = false)
-                # Now we put it back so another processor can use the hyperoptimizer
-                put!(ho_channel, local_ho)
+            try
+                # We don't care about the results of the `pmap` since we update the hyperoptimizer
+                # inside the loop.
+                $(esc(pmap))(1:ho.iterations) do i
+                    # We take the hyperoptimizer out of the channel, and get our new parameter values
+                    local_ho = take!(ho_channel)
+                    # We use `update_history` because we want to only update the history once we've
+                    # finished the iteration and have a result to report back as well. Otherwise,
+                    # some processes may observe the Hyperoptimizer in an inconsistent state with
+                    # `length(ho.history) > length(ho.results)`. Moreover, if one run is very quick
+                    # the history and results could become out of order with respect to one another.
+                    $(Expr(:tuple, esc.(params)...)), _ = iterate(local_ho, i; update_history = false)
+                    # Now we put it back so another processor can use the hyperoptimizer
+                    put!(ho_channel, local_ho)
 
-                # Now run the objective
-                res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
+                    # Now run the objective
+                    res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
 
-                # Now update the results; we again grab the one true hyperoptimizer,
-                # and populate it's history and result.
-                local_ho = take!(ho_channel)
-                push!(local_ho.history, $(Expr(:tuple, esc.(params[2:end])...)))
-                push!(local_ho.results, res)
-                put!(ho_channel, local_ho)
+                    # Now update the results; we again grab the one true hyperoptimizer,
+                    # and populate it's history and result.
+                    local_ho = take!(ho_channel)
+                    push!(local_ho.history, $(Expr(:tuple, esc.(params[2:end])...)))
+                    push!(local_ho.results, res)
+                    put!(ho_channel, local_ho)
 
-                res
+                    res
+                end
+            catch e
+                interrupt() # Stop all workers
+                if e isa InterruptException
+                    @info "Aborting hyperoptimization"
+                else
+                    rethrow()
+                end
             end
 
             # What we get out of the channel is an updated copy of our original hyperoptimizer.
