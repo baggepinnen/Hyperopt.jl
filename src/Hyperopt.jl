@@ -214,10 +214,18 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
             # <https://docs.julialang.org/en/v1/manual/distributed-computing/#Local-invocations>
             put!(ho_channel, deepcopy(ho))
 
+            # pmap continues running a few lefterover jobs when interrupted, this is to stop that
+            done_channel = RemoteChannel(() -> Channel{Bool}(1), 1)
+            put!(done_channel, false)
+
             try
                 # We don't care about the results of the `pmap` since we update the hyperoptimizer
                 # inside the loop.
                 $(esc(pmap))(1:ho.iterations) do i
+                    isdone = take!(done_channel)
+                    put!(done_channel, isdone)
+                    isdone && return
+
                     # We take the hyperoptimizer out of the channel, and get our new parameter values
                     local_ho = take!(ho_channel)
                     # We use `update_history` because we want to only update the history once we've
@@ -242,6 +250,8 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
                     res
                 end
             catch e
+                take!(done_channel)
+                put!(done_channel, true)
                 interrupt() # Stop all workers
                 if e isa InterruptException
                     @info "Aborting hyperoptimization"
@@ -263,6 +273,10 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
 
             empty!(ho.results)
             append!(ho.results, updated_ho.results)
+
+            # Do this last in case remaining runs are slow at starting so they can take the channel and stop
+            # properly without erroring (happens if accessing channel after closing)
+            close(done_channel)
 
             ho
         end
