@@ -106,43 +106,6 @@ end
         @test !occursin("Parameter b", text)
     end
 
-    @testset "Interrupt handling" begin
-        @info "Testing Interrupt handling"
-        # TODO this seems problematic, i will not be in sequence for the parallel ones?
-        
-        # @hyperopt
-        hop = @hyperopt for i=10, a = LinRange(1,5,10)
-            i == 1 && throw(InterruptException())
-            a
-        end
-        @test_throws Exception @hyperopt for i=10, a = LinRange(1,5,10)
-            i == 1 && throw(Exception("injected error"))
-            a
-        end
-
-        # @thyperopt
-        hop = @hyperopt for i=10, a = LinRange(1,5,10)
-            i == 1 && throw(InterruptException())
-            a
-        end
-        @test_throws Exception @hyperopt for i=10, a = LinRange(1,5,10)
-            i == 1 && throw(Exception("injected error"))
-            a
-        end
-
-        # @phyperopt
-        Distributed.nworkers() ≤ 1 && addprocs(2)
-        @everywhere using Hyperopt
-        hop = @phyperopt for i=10, a = LinRange(1,5,10)
-            i == 1 && throw(InterruptException())
-            a
-        end
-        @test_throws Exception @phyperopt for i=10, a = LinRange(1,5,10)
-            i >= 1 && throw(Exception("injected error"))
-            a
-        end
-    end
-
     #     minimum.((hor,hob,hot,hof))
     # end
 
