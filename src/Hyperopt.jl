@@ -311,15 +311,27 @@ function Base.maximum(ho::Hyperoptimizer)
     m
 end
 
-function printmin(ho::Hyperoptimizer)
+"""
+    printmin([io=stdout,] ho)
+
+Prints the parameters that minimized the function.
+"""
+printmin(ho::Hyperoptimizer) = printmin(stdout, ho)
+function printmin(io::IO, ho::Hyperoptimizer)
     for (param, value) in zip(ho.params, ho.minimizer)
-        println(param, " = ", value)
+        println(io, param, " = ", value)
     end
 end
 
-function printmax(ho::Hyperoptimizer)
+"""
+    printmax([io=stdout,] ho)
+
+Prints the parameters that maximized the function.
+"""
+printmax(ho::Hyperoptimizer) = printmax(stdout, ho)
+function printmax(io::IO, ho::Hyperoptimizer)
     for (param, value) in zip(ho.params, ho.maximizer)
-        println(param, " = ", value)
+        println(io, param, " = ", value)
     end
 end
 
