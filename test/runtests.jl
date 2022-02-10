@@ -41,6 +41,14 @@ end
         @test length(hor.history) == 102
         @test length(hor.results) == 102
 
+        # Test NaN handling
+        ho2 = @hyperopt for i=2, sampler=RandomSampler(), a = [20]
+            i == 1 ? a : NaN
+        end
+        @test minimum(ho2) == 20
+        @test maximum(ho2) == 20
+        @test minimizer(ho2) == 20
+        @test maximizer(ho2) == 20
     end
 
     @testset "Latin hypercube" begin
