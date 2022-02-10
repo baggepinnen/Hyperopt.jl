@@ -45,10 +45,10 @@ end
         ho2 = @hyperopt for i=2, sampler=RandomSampler(), a = [20], b = [1]
             i == 1 ? a*b : NaN
         end
-        @test minimum(ho2) == 20
-        @test maximum(ho2) == 20
-        @test minimizer(ho2) == [20] 
-        @test maximizer(ho2) == [20]
+        @test ho2.minimum == 20
+        @test ho2.maximum == 20
+        @test ho2.minimizer == [20] 
+        @test ho2.maximizer == [20]
     end
 
     @testset "Latin hypercube" begin
