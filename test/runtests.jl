@@ -47,8 +47,8 @@ end
         end
         @test ho2.minimum == 20
         @test ho2.maximum == 20
-        @test ho2.minimizer == [20] 
-        @test ho2.maximizer == [20]
+        @test ho2.minimizer == [20, 1] 
+        @test ho2.maximizer == [20, 1]
     end
 
     @testset "Latin hypercube" begin
