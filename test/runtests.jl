@@ -41,6 +41,13 @@ end
         @test length(hor.history) == 102
         @test length(hor.results) == 102
 
+        ho3 = @hyperopt for i=100, sampler=RandomSampler(), a = [10, 20]
+            a
+        end
+        io = IOBuffer()
+        printmin(io, ho3)
+        printmax(io, ho3)
+        @test io == "a = $(ho3.minimizer)\na = $(ho3.maximizer)\n"
     end
 
     @testset "Latin hypercube" begin
