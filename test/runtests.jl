@@ -40,7 +40,7 @@ end
         end
         @test length(hor.history) == 102
         @test length(hor.results) == 102
-
+      
         # Test NaN handling
         ho2 = @hyperopt for i=2, sampler=RandomSampler(), a = [20], b = [1]
             i == 1 ? a*b : NaN
@@ -49,6 +49,14 @@ end
         @test ho2.maximum == 20
         @test ho2.minimizer == [20, 1] 
         @test ho2.maximizer == [20, 1]
+
+        ho3 = @hyperopt for i=1, sampler=RandomSampler(), a = [20], b = [10]
+            a * b
+        end
+        io = IOBuffer()
+        printmin(io, ho3)
+        printmax(io, ho3)
+        @test String(take!(io)) == "a = 20\nb = 10\na = 20\nb = 10\n"
     end
 
     @testset "Latin hypercube" begin
