@@ -40,6 +40,15 @@ end
         end
         @test length(hor.history) == 102
         @test length(hor.results) == 102
+      
+        # Test NaN handling
+        ho2 = @hyperopt for i=2, sampler=RandomSampler(), a = [20], b = [1]
+            i == 1 ? a*b : NaN
+        end
+        @test ho2.minimum == 20
+        @test ho2.maximum == 20
+        @test ho2.minimizer == [20, 1] 
+        @test ho2.maximizer == [20, 1]
 
         ho3 = @hyperopt for i=1, sampler=RandomSampler(), a = [20], b = [10]
             a * b
