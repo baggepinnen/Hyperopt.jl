@@ -43,7 +43,7 @@ using Hyperopt
 
 f(x,a,b=true;c=10) = sum(@. x + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # Function to minimize
 
-# Main macro. The first argument to the for loop is always interpreted as the number of iterations
+# Main macro. The first argument to the for loop is always interpreted as the number of iterations (except for hyperband optimizer)
 ho = @hyperopt for i=50,
             sampler = RandomSampler(), # This is default if none provided
             a = LinRange(1,5,1000),
@@ -175,7 +175,8 @@ ho = @hyperopt for resources=50, sampler=Hyperband(R=50, η=3, inner=RandomSampl
     minimum(res), get_state(res) # return the minimum value and a state from which to continue the optimization
 end
 ```
-a (simple) working example using `Hyperband` and Optim is
+you may decide how to interpret the amount of resources, as a time limit, maximum number of iterations etc. 
+A (simple) working example using `Hyperband` and Optim is given below, where the resources are used to control the maximum calls to the objective function:
 ```julia
 using Optim
 f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
