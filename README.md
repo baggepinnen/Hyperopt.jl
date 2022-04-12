@@ -235,7 +235,7 @@ hb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a
     if state !== nothing
         a,c = state
     end
-    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=round(Int, i)))
     Optim.minimum(res), Optim.minimizer(res)
 end
 
@@ -244,7 +244,7 @@ bohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=BOHB(dims=[Hypero
     if state !== nothing
         a,c = state
     end
-    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=i))
+    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=round(Int, i)))
     Optim.minimum(res), Optim.minimizer(res)
 end
 ```
