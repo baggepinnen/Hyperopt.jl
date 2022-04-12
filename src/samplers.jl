@@ -110,7 +110,12 @@ function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false)
     hb = ho.sampler
     R, η = hb.R, hb.η
     hb.minimum = (Inf,)
-    smax = floor(Int, log(η,R))
+    if log(η,R) ≈ ceil(log(η, R)  # Catch machine precision error for e.g. R ∈ (3 .^ [5, 10, 13, 15, 17, 20, 23, 26, 27])
+        smax = ceil(Int, log(η, R)  # could use `round` instead of `ceil`
+    else
+        smax = floor(Int, log(η,R))
+    end
+    
     B = (smax + 1)*R # B is budget
     
     p = Progress(smax+1, 1, "Hyperband")
