@@ -110,8 +110,8 @@ function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false)
     hb = ho.sampler
     R, η = hb.R, hb.η
     hb.minimum = (Inf,)
-    if log(η,R) ≈ ceil(log(η, R)        # Catch machine precision error for e.g. 
-        smax = ceil(Int, log(η, R)      # η=3 and R ∈ (3 .^ [5, 10, 13, 15, 17, 20, 23, 26, 27]), or
+    if log(η,R) ≈ ceil(log(η, R))       # Catch machine precision error for e.g. 
+        smax = ceil(Int, log(η, R))     # η=3 and R ∈ (3 .^ [5, 10, 13, 15, 17, 20, 23, 26, 27]), or
     else                                # η=9 and R ∈ (9 .^ [5, 10, 13, 15, 17])
         smax = floor(Int, log(η,R))
     end
