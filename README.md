@@ -175,7 +175,9 @@ ho = @hyperopt for resources=50, sampler=Hyperband(R=50, η=3, inner=RandomSampl
     minimum(res), get_state(res) # return the minimum value and a state from which to continue the optimization
 end
 ```
-you may decide how to interpret the amount of resources as a time limit, maximum number of iterations etc. 
+the resources are increased by defining a variable `resources` inside each loop, which grows according to the hyperband algorithm. 
+How to interpret `resources` is entirely up to the user - it can be a time limit, the maximum number of iterations, or anything else.
+
 A (simple) working example using `Hyperband` and Optim is given below, where the resources are used to control the maximum calls to the objective function:
 ```julia
 using Optim
