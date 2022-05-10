@@ -164,7 +164,7 @@ end
 
 
 ## Hyperband
-`Hyperband(R=50, η=3, inner=RandomSampler())` Implements [Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization](https://arxiv.org/abs/1603.06560). The maximum amount of resources is given by `R` and the parameter `η` roughly determines the proportion of trials discarded between each round of successive halving. When using `Hyperband` the expression inside the `@hyperopt` macro takes the following form
+`Hyperband(R=50, η=3, inner=RandomSampler())` Implements [Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization](https://arxiv.org/abs/1603.06560). The maximum amount of resources is given by `R` and the parameter `η` roughly determines the proportion of trials discarded between each round of successive halving. When using `Hyperband` the expression inside the `@hyperopt` macro takes the form of the following pseudocode
 ```julia
 ho = @hyperopt for resources=50, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
     if state === nothing # Query if state is initialized
@@ -175,7 +175,9 @@ ho = @hyperopt for resources=50, sampler=Hyperband(R=50, η=3, inner=RandomSampl
     minimum(res), get_state(res) # return the minimum value and a state from which to continue the optimization
 end
 ```
-you may decide how to interpret the amount of resources, as a time limit, maximum number of iterations etc. 
+the resources are increased by defining a variable `resources` inside each loop, which grows according to the hyperband algorithm. 
+How to interpret `resources` is entirely up to the user - it can be a time limit, the maximum number of iterations, or anything else.
+
 A (simple) working example using `Hyperband` and Optim is given below, where the resources are used to control the maximum calls to the objective function:
 ```julia
 using Optim
@@ -229,7 +231,9 @@ hohb = hyperband(objective, candidates; R=50, η=3, threads=true)
 ## BOHB
 [BOHB: Robust and Efficient Hyperparameter Optimization at Scale](https://arxiv.org/abs/1807.01774) refines Hyperband by replacing the random sampler by a bayesian-optimization-based sampler. Now you can use it by simply replace the sampler in `Hyperband` as `BOHB(dims=[<dims>...])`
 
-### Example
+### Examples
+
+Below in an example _without_ BOHB, which should be familiar from previous examples:
 ```julia
 using Optim
 hb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
@@ -239,8 +243,11 @@ hb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a
     res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=round(Int, i)))
     Optim.minimum(res), Optim.minimizer(res)
 end
+```
 
-# Using BOHB with same setting, remember to specify dimension types!
+To use BOHB, simply replace the inner sampler. Here we change from `RandomSampler` to `BOHB`.  
+Remember to specify dimension types for `BOHB`!
+```julia
 bohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=BOHB(dims=[Hyperopt.Continuous(), Hyperopt.Continuous()])), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
     if state !== nothing
         a,c = state
@@ -250,6 +257,9 @@ bohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=BOHB(dims=[Hypero
 end
 ```
 
+When using BOHB, a Kernel Density Estimator will estimate hyperparameters that balance exploration and exploitation based on previous observations. It does this by setting the `state` variable to a tuple of the estimated set of hyperparameters, at certain points within the loop. As a consequence, the `state` returned (`Optim.minimizer(res)` in the previous example) needs to be a tuple holding the values for each hyperparameter in order (`(a, c)` in the previous example).
+
+Note - BOHB currently only handles `Continuous` variables, see [issue #80](https://github.com/baggepinnen/Hyperopt.jl/issues/80) for a discussion on adding support for categorical variables.
 
 # Parallel execution
 - The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.
