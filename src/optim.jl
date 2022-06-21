@@ -31,3 +31,49 @@ function hyperoptim(f, candidates, algorithm = Optim.NelderMead(), opts = Optim.
     ho = hyperband(fun, candidates; R, η, inner, threads)
     ho
 end
+
+function multistart(f, candidates; N, algorithm = Optim.NelderMead(), opts = Optim.Options(), inner = RandomSampler(), threads=false)
+    ho = Hyperoptimizer(;
+        iterations = N,
+        params = [Symbol("$i") for i in eachindex(candidates)],
+        candidates,
+        history = Vector{Any}(undef, N),
+        results = Vector{Any}(undef, N),
+        sampler = inner,
+        objective = f,
+    )
+    if inner isa Union{LHSampler,CLHSampler}
+        ho.iterations = length(candidates[1])
+        init!(inner, ho)
+    end
+    sem = Base.Semaphore(threads)
+    try
+        @sync for i = 1:N
+            pars = ho.sampler(ho, i)
+            # nt = (; Pair.((:i, ho.params...), (state, samples...))...)
+            # pars = [Base.tail(nt)...] # the first element is i
+
+            if threads >= 2
+                Base.acquire(sem)
+                Threads.@spawn begin
+                    res = Optim.optimize(f, pars, algorithm, opts)
+                    ho.history[i] = res.minimizer
+                    ho.results[i] = res.minimum
+                    Base.release(sem)
+                end
+
+            else
+                res = Optim.optimize(f, pars, algorithm, opts)
+                ho.history[i] = res.minimizer
+                ho.results[i] = res.minimum
+            end
+        end
+    catch e
+        if e isa InterruptException
+            @info "Aborting hyperoptimization"
+        else
+            rethrow()
+        end
+    end
+    ho
+end
