@@ -1,6 +1,6 @@
 module Hyperopt
 
-export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax, warn_on_boundary
+export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax, warn_on_boundary, plot
 export RandomSampler, LHSampler, CLHSampler, hyperband, Hyperband, hyperoptim, BOHB, Continuous, Categorical, UnorderedCategorical
 
 using Base.Threads: threadid, nthreads
@@ -16,6 +16,7 @@ using Distributions: Normal, truncated
 using MultiKDE
 using Requires
 using Printf
+using Plots
 
 const DimensionType = LHCDimension
 
