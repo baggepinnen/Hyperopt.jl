@@ -29,6 +29,7 @@ ProgressMeter = "1.7"
 RecipesBase = "0.7, 0.8, 1.0"
 Requires = "1"
 Setfield = "0.7, 0.8, 1.0"
+Statistics = "1"
 ThreadPools = "1, 2"
 julia = "1.6"
 
