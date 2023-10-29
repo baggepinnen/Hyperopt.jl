@@ -1,5 +1,8 @@
 # Hyperopt
 
+## Maintanence mode
+⚠️ This package has outgrown its original design and has in the process become hard to maintain and extend. This package is therefore in maintainence mode, and is unlikely to accept suggestions for significant continued development. Smaller bug-fix PRs are still welcome.
+
 [![Build Status](https://github.com/baggepinnen/Hyperopt.jl/workflows/CI/badge.svg)](https://github.com/baggepinnen/Hyperopt.jl/actions)
 [![codecov.io](http://codecov.io/github/baggepinnen/Hyperopt.jl/coverage.svg?branch=master)](http://codecov.io/github/baggepinnen/Hyperopt.jl?branch=master)
 
