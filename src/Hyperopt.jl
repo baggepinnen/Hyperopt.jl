@@ -6,6 +6,7 @@ export RandomSampler, LHSampler, CLHSampler, hyperband, Hyperband, hyperoptim, B
 using Base.Threads: threadid, nthreads
 using LinearAlgebra, Statistics, Random
 using ProgressMeter
+using ComponentArrays
 using MacroTools
 using MacroTools: postwalk, prewalk
 using RecipesBase
@@ -37,11 +38,23 @@ Base.@kwdef mutable struct Hyperoptimizer{S<:Sampler, F}
     objective::F = nothing
 end
 
+function namedtuple_params(ho, i)
+    vals = ho.history[i]
+    ComponentVector((; zip(ho.params, vals)...))
+end
+
 function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
     s === :minimum && (return isempty(ho.results) ? NaN :  minimum(replace(ho.results, NaN => Inf)))
-    s === :minimizer && (return isempty(ho.results) ? [] :  ho.history[argmin(replace(ho.results, NaN => Inf))])
+    # s === :minimizer && (return isempty(ho.results) ? [] :  ho.history[argmin(replace(ho.results, NaN => Inf))])
     s === :maximum && (return isempty(ho.results) ? NaN :  maximum(replace(ho.results, NaN => -Inf)))
-    s === :maximizer && (return isempty(ho.results) ? [] :  ho.history[argmax(replace(ho.results, NaN => -Inf))])
+    # s === :maximizer && (return isempty(ho.results) ? [] :  ho.history[argmax(replace(ho.results, NaN => -Inf))])
+    if s === :minimizer
+        return isempty(ho.results) ? [] :  namedtuple_params(ho, argmin(replace(ho.results, NaN => Inf)))
+    end
+    s === :maximum && (return isempty(ho.results) ? NaN :  maximum(replace(ho.results, NaN => Inf)))
+    if s === :maximizer
+        return isempty(ho.results) ? [] :  namedtuple_params(ho, argmax(replace(ho.results, NaN => Inf)))
+    end
     return getfield(ho,s)
 end
 
@@ -356,7 +369,7 @@ function warn_on_boundary(ho, sense = :min)
             (m[i],)
         end
     end
-    for i in eachindex(m)
+    for i in 1:length(m)
         c = unique(ho.candidates[i])
         if m[i] ∈ extremas[i] && length(c) > 3
             println("Parameter $(ho.params[i]) obtained its optimum on an extremum of the sampled region: $(m[i])")
