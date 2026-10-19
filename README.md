@@ -3,8 +3,8 @@
 ## Maintanence mode
 ⚠️ This package has outgrown its original design and has in the process become hard to maintain and extend. This package is therefore in maintainence mode, and is unlikely to accept suggestions for significant continued development. Smaller bug-fix PRs are still welcome.
 
-[![Build Status](https://github.com/baggepinnen/Hyperopt.jl/workflows/CI/badge.svg)](https://github.com/baggepinnen/Hyperopt.jl/actions)
-[![codecov.io](http://codecov.io/github/baggepinnen/Hyperopt.jl/coverage.svg?branch=master)](http://codecov.io/github/baggepinnen/Hyperopt.jl?branch=master)
+[![CI](https://github.com/baggepinnen/Hyperopt.jl/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/baggepinnen/Hyperopt.jl/actions/workflows/ci.yml?query=branch%3Amaster)
+[![codecov](https://codecov.io/gh/baggepinnen/Hyperopt.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/baggepinnen/Hyperopt.jl)
 
 
 A package to perform hyperparameter optimization. Currently supports random search, [latin hypercube sampling](https://en.wikipedia.org/wiki/Latin_hypercube_sampling) and [Bayesian optimization](https://arxiv.org/abs/1807.02811).

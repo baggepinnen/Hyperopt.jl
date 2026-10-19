@@ -3,10 +3,16 @@ on:
   schedule:
     - cron: 0 0 * * *
   workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
 jobs:
   CompatHelper:
     runs-on: ubuntu-latest
     steps:
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
       - name: "Install CompatHelper"
         run: |
           import Pkg
@@ -22,5 +28,6 @@ jobs:
         shell: julia --color=yes {0}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COMPATHELPER_PRIV: ${{ secrets.DOCUMENTER_KEY }}
-          # COMPATHELPER_PRIV: ${{ secrets.COMPATHELPER_PRIV }}
+          # Private key of a deploy key with write access. Without it, CompatHelper opens the
+          # pull requests with GITHUB_TOKEN, and these pull requests do not trigger the CI workflow.
+          COMPATHELPER_PRIV: ${{ secrets.COMPATHELPER_PRIV }}
