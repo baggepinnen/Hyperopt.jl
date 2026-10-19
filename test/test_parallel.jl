@@ -52,6 +52,19 @@ end
         @test err isa TaskFailedException
         @test err.task.exception isa ErrorException
         @test started[] < 10
+
+        # After an interruption of the calling task, no further elements are taken
+        started = Threads.Atomic{Int}(0)
+        running = interrupt_after(0.5)
+        @test_throws InterruptException Hyperopt.tmap(1:1000; ntasks = 2) do x
+            Threads.atomic_add!(started, 1)
+            sleep(0.05)
+        end
+        running[] = false
+        sleep(0.2) # The running evaluations complete
+        n = started[]
+        sleep(0.2)
+        @test started[] == n < 1000
     end
 
     @testset "History types and reproducibility" begin
