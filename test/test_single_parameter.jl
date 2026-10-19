@@ -83,14 +83,16 @@ end
         end
         @test length(ho.history) == length(ho.results) == 44
 
-        ho = @hyperopt for r = 1, sampler = Hyperband(R=9, η=3, inner=LHSampler()), a = LinRange(1, 5, 9)
+        # The Latin hypercube plan contains a distinct point for each configuration
+        ho = @hyperopt for r = 1, sampler = Hyperband(R=9, η=3, inner=LHSampler()), a = LinRange(1, 5, 17)
             if state !== nothing
                 a, = state
             end
             (a - 3)^2 + 1/r, [a]
         end
         @test length(ho.results) == 22
-        @test all(h -> h[1] in LinRange(1, 5, 9), ho.history)
+        @test all(h -> h[1] in LinRange(1, 5, 17), ho.history)
+        @test length(unique(ho.history)) == 17
     end
 
     @testset "Hyperband with BOHB" begin
@@ -128,7 +130,7 @@ end
         end
         ho = hyperoptim(x -> (x[1] - 3)^2, [LinRange(1, 5, 100)], Rmin=1, verbose=false, threads=false)
         @test ho.minimum < 1e-6
-        @test ho.minimizer[1] ≈ 3 atol = 1e-2
+        @test ho.sampler.minimum.state[1] ≈ 3 atol = 1e-2
     end
 
     @testset "Expressions are evaluated once" begin

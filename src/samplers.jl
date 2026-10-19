@@ -237,15 +237,82 @@ end
 # Hyperband ====================================================================
 
 """
+    Hyperband(; R = nothing, η = 3, inner = RandomSampler())
+    Hyperband(R)
 
+Sampler that implements [Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization](https://arxiv.org/abs/1603.06560).
+Hyperband runs several brackets of successive halving. In each bracket, configurations drawn from the sampler `inner`
+are evaluated with a budget, i.e., an amount of resources. The fraction `1/η` of the configurations with the smallest
+losses is evaluated again with `η` times the budget, until the maximum budget `R` is reached.
+
+With `@hyperopt`, the first loop argument names the variable that holds the budget of an evaluation, and its value is
+the maximum budget `R`, which then does not have to be given to the sampler:
+```julia
+ho = @hyperopt for resources = 81, sampler = Hyperband(η = 3), a = LinRange(1, 5, 100), b = [true, false]
+    model = state === nothing ? initial_model(a, b) : state
+    train!(model, resources)
+    loss(model), model
+end
+```
+In every evaluation, the hyperparameter variables hold the configuration. The keyword `state` is `nothing` in the first
+evaluation of a configuration, and otherwise the state returned by the previous evaluation of the same configuration.
+The loop body returns `(loss, state)`, where the state is any object from which a later evaluation can resume, e.g.,
+the weights of a model and the state of its optimizer. If the loop body returns only the loss, `state` is `nothing` in
+every evaluation. If `R` is also given to the sampler and differs from the value of the first loop argument, the value
+of the sampler is used and a deprecation warning is emitted.
+
+The evaluations are recorded in `ho.history` (the configurations), `ho.results` (the losses) and `ho.sampler.budgets`
+(the budgets). `ho.minimum`, `ho.minimizer`, `ho.maximum` and `ho.maximizer` compare only the results obtained with the
+largest budget. `ho.sampler.minimum` is `nothing` before the first evaluation, and otherwise the named tuple
+`(; loss, budget, state, configuration)` of the evaluation that `ho.minimum` refers to. `plot(ho)` shows the results
+of each budget as a separate series. `ho.iterations` is the number of configurations that one run of Hyperband draws
+from `inner`. A `Hyperband` sampler records the evaluations of one `Hyperoptimizer` and cannot be used for several.
+
+With `inner = LHSampler()` or `CLHSampler(...)`, the configurations of all brackets of a run are distinct points of a
+Latin hypercube plan, which contains one point per element of the candidate vectors. The candidate vectors must
+therefore contain at least `ho.iterations` elements.
+
+See also [`hyperband`](@ref) for an interface without the macro.
 """
 Base.@kwdef mutable struct Hyperband <: Sampler
-    R
+    R = nothing
     η = 3
-    minimum = (Inf,)
     inner::Sampler = RandomSampler()
+    budgets::Vector{Float64} = Float64[]
+    minimum::Union{Nothing, NamedTuple} = nothing
+    # Number of configurations drawn from `inner` in the current run, the next configuration is drawn with the index
+    # `nsampled + 1`
+    nsampled::Int = 0
 end
 Hyperband(R) = Hyperband(R=R)
+
+# Sets the maximum budget from the value of the first loop argument of `@hyperopt`
+function set_R!(hb::Hyperband, value)
+    if hb.R === nothing
+        hb.R = value
+    elseif value != hb.R
+        Base.depwarn("The value of the first loop argument of `@hyperopt` with a `Hyperband` sampler is the maximum budget R. The value $(repr(value)) differs from R = $(repr(hb.R)) of the sampler and is ignored; a differing value will be an error in a future release. Give the same value in both places, or omit R from the sampler, e.g., `@hyperopt for resources = $(repr(hb.R)), sampler = Hyperband(η = $(repr(hb.η))), ...`.", :set_R!; force=true)
+    end
+    hb
+end
+
+# The number of configurations and the budgets of the rungs of each bracket, in the order in which Hyperband runs the
+# brackets. The budgets are computed from `R`, so that rungs of different brackets with the same budget have equal budgets.
+function brackets(R, η)
+    η > 1 || throw(ArgumentError("Hyperband: η must be greater than 1, got η = $η"))
+    if log(η,R) ≈ ceil(log(η, R))       # Catch machine precision error for e.g.
+        smax = ceil(Int, log(η, R))     # η=3 and R ∈ (3 .^ [5, 10, 13, 15, 17, 20, 23, 26, 27]), or
+    else                                # η=9 and R ∈ (9 .^ [5, 10, 13, 15, 17])
+        smax = floor(Int, log(η,R))
+    end
+    B = (smax + 1)*R # Total budget of a bracket
+    map(smax:-1:0) do s
+        n = ceil(Int, (B/R)*((η^s)/(s+1)))
+        n, [R / η^(s-i) for i in 0:s]
+    end
+end
+
+nconfigurations(hb::Hyperband) = sum(first, brackets(hb.R, hb.η))
 
 function optimize(ho::Hyperoptimizer{<:Hyperband})
     try
@@ -260,67 +327,143 @@ function optimize(ho::Hyperoptimizer{<:Hyperband})
     ho
 end
 
-function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false)
+"""
+    hyperband(ho::Hyperoptimizer{Hyperband}; threads = false, mapfun = threads ? ThreadPools.tmap : map)
+
+Run Hyperband with the sampler `ho.sampler` and the objective `ho.objective`, which is called as
+`ho.objective(budget, configuration...; state)` and returns `(loss, state)` or only the loss, see [`Hyperband`](@ref).
+The evaluations are appended to `ho.history`, `ho.results` and `ho.sampler.budgets`. `mapfun` evaluates the
+configurations of a rung, see `Hyperopt.successive_halving`.
+
+Return `ho.sampler.minimum`.
+"""
+function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false, mapfun=threads ? ThreadPools.tmap : map)
     hb = ho.sampler
-    R, η = hb.R, hb.η
-    hb.minimum = (Inf,)
-    if log(η,R) ≈ ceil(log(η, R))       # Catch machine precision error for e.g. 
-        smax = ceil(Int, log(η, R))     # η=3 and R ∈ (3 .^ [5, 10, 13, 15, 17, 20, 23, 26, 27]), or
-    else                                # η=9 and R ∈ (9 .^ [5, 10, 13, 15, 17])
-        smax = floor(Int, log(η,R))
-    end
-    
-    B = (smax + 1)*R # B is budget
-    
-    p = Progress(smax+1; dt=1, desc="Hyperband", enabled=SHOW_PROGRESS[])
-    for s in smax:-1:0
-        n = ceil(Int, (B/R)*((η^s)/(s+1)))
-        r = R / (η^s)
-        minᵢ = successive_halving(ho, n, r, s; threads)
-        if minᵢ[1] < hb.minimum[1]
-            hb.minimum = minᵢ
-        end
-        ProgressMeter.next!(p; showvalues = [("bracket (of $(smax+1))",smax-s+1), ("minimum", hb.minimum[1]), ("with resources", hb.minimum[2]), ("minizer", hb.minimum[3])])
+    hb.R === nothing && throw(ArgumentError("Hyperband: the maximum budget R is not specified"))
+    length(hb.budgets) == length(ho.results) || throw(ArgumentError("The Hyperband sampler has recorded the budgets of $(length(hb.budgets)) evaluations, but the Hyperoptimizer contains $(length(ho.results)) results. A Hyperband sampler records the evaluations of one Hyperoptimizer and cannot be used for several; construct a new sampler for each optimization, or continue an optimization with `ho = ...`."))
+    bs = brackets(hb.R, hb.η)
+    ho.iterations = sum(first, bs)
+    init_inner!(hb, ho)
+    hb.nsampled = 0
+    p = Progress(length(bs); dt=1, desc="Hyperband", enabled=SHOW_PROGRESS[])
+    for (k, (n, budgets)) in enumerate(bs)
+        successive_halving(ho, n, budgets; mapfun)
+        ProgressMeter.next!(p; showvalues = progress_values(hb, k, length(bs)))
     end
     return hb.minimum
 end
 
-
-function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=false)
-    hb = ho.sampler
-    costfun = ho.objective
-    η = hb.η
-    minimum = Inf
-    C = [ hb.inner(ho, i) for i=1:n ] # Configurations
-    T = fill(nothing, n) # States, `nothing` for configurations that have not been evaluated
-    mapfun = threads ? ThreadPools.tmap : map
-    for i in 0:s
-        nᵢ = n/(η^i) # Flooring takes place below
-        rᵢ = r*(η^i)
-        LTend = mapfun((c, t)->costfun(rᵢ, c...; state=t), C, T)
-        L, T = first.(LTend), last.(LTend)
-        append!(ho.history, T)
-        append!(ho.results, L)
-        if hb.inner isa BOHB
-            update_observations(ho, rᵢ, T, L)
-        end
-        perm = sortperm(L)
-        besti = perm[1]
-        if L[besti] < minimum[1]
-            minimum = (L[besti], rᵢ, T[besti])
-        end
-        kept = perm[1:floor(Int,nᵢ/η)]
-        C, T = C[kept], T[kept]
-    end
-    return minimum
+function progress_values(hb::Hyperband, k, nbrackets)
+    values = Tuple{String, Any}[("bracket", "$k of $nbrackets")]
+    m = hb.minimum
+    m === nothing || append!(values, [("minimum", m.loss), ("with budget", m.budget), ("minimizer", m.configuration)])
+    values
 end
 
+# Prepares the Latin hypercube plan of the inner sampler for a run, whose `ho.iterations` configurations are drawn with
+# distinct indices into the plan. The plan contains one point per element of the candidate vectors.
+function init_inner!(hb::Hyperband, ho)
+    s = hb.inner
+    s isa Union{LHSampler,CLHSampler} || return
+    nconfigs = ho.iterations
+    N = lhs_plan_size(s, ho)
+    nconfigs <= N || throw(ArgumentError("The Latin hypercube plan of the inner sampler contains one point per element of the candidate vectors (of the Continuous dimensions for CLHSampler), $N points, but Hyperband with R = $(hb.R) and η = $(hb.η) draws $nconfigs configurations. Provide candidate vectors with at least $nconfigs elements, or use another inner sampler."))
+    ho.iterations = N # `init!` creates a plan with `ho.iterations` points
+    try
+        init!(s, ho)
+    finally
+        ho.iterations = nconfigs
+    end
+end
 
+lhs_plan_size(::LHSampler, ho) = maximum(length, ho.candidates)
+function lhs_plan_size(s::CLHSampler, ho)
+    lengths = [length(c) for (d, c) in zip(s.dims, ho.candidates) if d isa Continuous]
+    isempty(lengths) ? ho.iterations : maximum(lengths)
+end
+
+"""
+    successive_halving(ho, n, r = 1, s = round(Int, log(ho.sampler.η, n)); threads = false, mapfun = threads ? ThreadPools.tmap : map)
+    successive_halving(ho, n, budgets::AbstractVector; threads = false, mapfun = threads ? ThreadPools.tmap : map)
+
+Run successive halving with the `Hyperband` sampler `ho.sampler`. `n` configurations are drawn from the inner sampler and
+evaluated with the budget `budgets[1]`. The fraction `1/η` of the configurations with the smallest losses is evaluated
+again with the budget `budgets[2]`, and so on. The first method uses the budgets `r * η^i` for `i = 0:s`.
+
+`mapfun(f, configurations, states)` evaluates the configurations of a rung and returns the values of `f`, e.g., `map`,
+`ThreadPools.tmap` or `Distributed.pmap`. The function `f` captures only `ho.objective` and the budget.
+
+Return `ho.sampler.minimum`.
+"""
+function successive_halving(ho, n, r::Real=1, s=round(Int, log(ho.sampler.η, n)); kwargs...)
+    η = ho.sampler.η
+    successive_halving(ho, n, [r*η^i for i in 0:s]; kwargs...)
+end
+
+function successive_halving(ho, n, budgets::AbstractVector; threads=false, mapfun=threads ? ThreadPools.tmap : map)
+    hb = ho.sampler
+    objective = ho.objective
+    η = hb.η
+    C = [hb.inner(ho, hb.nsampled + i) for i in 1:n] # Configurations
+    hb.nsampled += n
+    T = fill(nothing, n) # States, `nothing` for configurations that have not been evaluated
+    for (i, budget) in enumerate(budgets)
+        isempty(C) && break
+        LT = map(loss_and_state, mapfun((c, t) -> objective(budget, c...; state=t), C, T))
+        L, T = first.(LT), last.(LT)
+        append!(ho.history, C)
+        append!(ho.results, L)
+        append!(hb.budgets, fill(budget, length(L)))
+        if hb.inner isa BOHB
+            update_observations(ho, budget, C, L)
+        end
+        update_minimum!(hb, budget, L, T, C)
+        kept = sortperm(L)[1:floor(Int, n/η^i)]
+        C, T = C[kept], T[kept]
+    end
+    return hb.minimum
+end
+
+loss_and_state(loss::Real) = (loss, nothing)
+loss_and_state(val::Tuple{Real, Any}) = val
+loss_and_state(val) = throw(ArgumentError("The objective of Hyperband must return a real-valued loss, or a tuple `(loss, state)` of a real-valued loss and a state from which a later evaluation can resume. The objective returned a value of type $(typeof(val))."))
+
+# Replaces `hb.minimum` by an evaluation with a larger budget, or with the same budget and a smaller loss, so that it
+# refers to the same evaluation as `ho.minimum`
+function update_minimum!(hb::Hyperband, budget, L, T, C)
+    for k in eachindex(L)
+        m = hb.minimum
+        if m === nothing || budget > m.budget || (budget == m.budget && compared_loss(L[k]) < compared_loss(m.loss))
+            hb.minimum = (loss=L[k], budget=Float64(budget), state=T[k], configuration=C[k])
+        end
+    end
+end
+
+compared_loss(loss) = isnan(loss) ? Inf : loss
+
+# Only the results obtained with the largest budget are compared. Results without a recorded budget, e.g., a history
+# that was not recorded by `hyperband`, are all compared.
+function compared_indices(ho::Hyperoptimizer{Hyperband})
+    budgets = ho.sampler.budgets
+    (isempty(budgets) || length(budgets) != length(ho.results)) && return eachindex(ho.results)
+    findall(==(maximum(budgets)), budgets)
+end
+
+"""
+    hyperband(f, candidates; R, η = 3, inner = RandomSampler(), threads = false)
+
+Run Hyperband without the macro `@hyperopt` and return the `Hyperoptimizer`. `candidates` is a vector or a `NamedTuple`
+of candidate vectors, one per hyperparameter. The objective is called as `f(budget, pars)`, where `pars` is the vector
+of hyperparameter values in the first evaluation of a configuration, and the state returned by the previous evaluation
+of the same configuration otherwise. `f` returns `(loss, state)` or only the loss; in the latter case, `pars` is the
+vector of hyperparameter values in every evaluation. See [`Hyperband`](@ref) for the remaining arguments and the
+recorded results.
+"""
 function hyperband(f, candidates; R, η=3, inner = RandomSampler(), threads=false)
     sampler = Hyperband(; R, η, inner)
     objective(i, pars...; state = nothing) = f(i, state === nothing ? [pars...] : state)
     ho = Hyperoptimizer(;
-        iterations = 1,
+        iterations = nconfigurations(sampler),
         params = [Symbol("$i") for i in eachindex(candidates)],
         candidates,
         history = [],
@@ -328,10 +471,6 @@ function hyperband(f, candidates; R, η=3, inner = RandomSampler(), threads=fals
         sampler,
         objective,
     )
-    if inner isa Union{LHSampler,CLHSampler}
-        ho.iterations = length(candidates[1])
-        init!(inner, ho)
-    end
     hyperband(ho; threads)
     ho
 end
@@ -481,7 +620,9 @@ Inner sampler of [`Hyperband`](@ref) that implements the model-based sampling of
 [BOHB: Robust and Efficient Hyperparameter Optimization at Scale](https://arxiv.org/abs/1807.01774).
 A fraction `ρ` of the configurations is sampled at random. The remaining configurations are proposed by
 maximizing the ratio l(x)/g(x) of two kernel density estimates, fitted to the best and the worst configurations
-evaluated with the largest budget for which sufficiently many observations are available.
+evaluated with the largest budget for which sufficiently many observations are available. The observations are the
+evaluated configurations, i.e., the values of the hyperparameters, and their losses; the states returned by the
+objective are not used.
 
 `dims` contains one dimension type per hyperparameter, in the order of the candidate vectors:
 - `Continuous()`: an ordered, real-valued hyperparameter. The densities are estimated in the coordinate given by the
