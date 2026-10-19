@@ -3,18 +3,15 @@ module Hyperopt
 export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax, warn_on_boundary
 export RandomSampler, LHSampler, CLHSampler, hyperband, Hyperband, hyperoptim, BOHB, Continuous, Categorical, UnorderedCategorical
 
-using Base.Threads: threadid, nthreads
-using LinearAlgebra, Statistics, Random
+using Random
 using ProgressMeter
 using MacroTools
-using MacroTools: postwalk, prewalk
 using RecipesBase
 using Distributed
 using LatinHypercubeSampling
 using ThreadPools
 using Distributions: Normal, truncated
 using MultiKDE
-using Requires
 using Printf
 
 const DimensionType = LHCDimension
@@ -184,9 +181,16 @@ function loop_body(ex)
 end
 
 
+"""
+    Hyperopt.SHOW_PROGRESS[] = false
+
+Disable the progress meters that `@hyperopt`, `hyperband` and `hyperoptim` display. The progress meters are enabled by default.
+"""
+const SHOW_PROGRESS = Ref(true)
+
 function optimize(ho::Hyperoptimizer)
     try
-        @showprogress "Hyperoptimizing" for nt = ho
+        @showprogress desc="Hyperoptimizing" enabled=SHOW_PROGRESS[] for nt = ho
             res = ho.objective(nt...)
             push!(ho.results, res)
         end
@@ -397,8 +401,26 @@ end
 
 include("plotting.jl")
 
-function __init__()
-    Requires.@require Optim="429524aa-4258-5aef-a3af-852621145aeb" include("optim.jl")
-end
+"""
+    hyperoptim(f, candidates, algorithm = Optim.NelderMead(), opts = Optim.Options(); R = 30, η = 3, inner = RandomSampler(), threads = true, verbose = false, Rmin = 0.1, kwargs...)
+
+Multi-start optimization with Optim and Hyperband. The interface is similar to that of `Optim.optimize`, but the initial guess is replaced by a vector of candidate vectors. The resources are used to set the allowed time for optimization by `Optim.optimize`.
+
+This function requires Optim.jl to be loaded, i.e., `using Optim`.
+
+# Arguments:
+- `f` a function from `Rⁿ -> R`, i.e., it takes a vector of parameters.
+- `candidates`: A vector of vectors
+- `algorithm`: One of the Optim algorithms
+- `opts`: `Optim.Options`. The field `time_limit` is replaced by the resources allocated to each call to `Optim.optimize`.
+- `inner`: The inner sampler
+- `threads`: Use threading to evaluate the cost function
+- `verbose`: Print the resources and the minimum after each call to `Optim.optimize`.
+- `Rmin`: The minimum amount of resources to use.
+- `kwargs`: Are sent to `Optim.optimize`.
+
+See `?hyperband` for the remaining arguments.
+"""
+function hyperoptim end
 
 end # module

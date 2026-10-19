@@ -1,22 +1,47 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - master
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+permissions:
+  # `actions: write` permits julia-actions/cache to delete outdated caches.
+  actions: write
+  contents: read
 jobs:
   test:
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    continue-on-error: ${{ matrix.version == 'pre' }}
     strategy:
+      fail-fast: false
       matrix:
-        julia-version: ['1.10']
-        os: [ubuntu-latest]
+        version:
+          - 'lts'
+          - '1'
+          - 'pre'
+        os:
+          - ubuntu-latest
+    env:
+      JULIA_NUM_THREADS: 4
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/setup-julia@latest
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
         with:
-          version: ${{ matrix.julia-version }}
-      - uses: julia-actions/julia-runtest@latest
+          version: ${{ matrix.version }}
+      - uses: julia-actions/cache@v3
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v1
+      - uses: codecov/codecov-action@v7
         with:
-          file: ./lcov.info
+          files: lcov.info
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false

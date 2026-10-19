@@ -118,7 +118,7 @@ function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false)
     
     B = (smax + 1)*R # B is budget
     
-    p = Progress(smax+1, 1, "Hyperband")
+    p = Progress(smax+1; dt=1, desc="Hyperband", enabled=SHOW_PROGRESS[])
     for s in smax:-1:0
         n = ceil(Int, (B/R)*((η^s)/(s+1)))
         r = R / (η^s)
@@ -157,7 +157,6 @@ function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=fal
         end
         kept = perm[1:floor(Int,nᵢ/η)]
         C, T = C[kept], T[kept]
-        Base.CoreLogging.@logmsg -1 "successive_halving" progress=i/s
     end
     return minimum
 end
