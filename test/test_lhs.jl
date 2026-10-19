@@ -143,7 +143,7 @@ energy(plan, continuous) = sum(Hyperopt.pair_potential(Hyperopt.squared_distance
         end
         @test sort(first.(ho1.history)) == repeat(1:5, inner = 2)
 
-        # Parallel evaluation, which records the configurations as tuples
+        # Parallel evaluation
         hot = @thyperopt for i = 20, sampler = LHSampler(), a = LinRange(1, 5, 20), b = LinRange(1, 5, 20)
             a + b
         end

@@ -12,6 +12,12 @@ Hyperopt
 @thyperopt
 ```
 
+## Parallel evaluation
+
+```@docs
+Hyperopt.tmap
+```
+
 ## Hyperoptimizer
 
 ```@docs

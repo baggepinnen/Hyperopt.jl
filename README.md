@@ -220,6 +220,37 @@ The keyword argument `dims` contains one dimension type per hyperparameter, in t
 Every configuration proposed by BOHB consists of elements of the candidate vectors. All random decisions of BOHB use the RNG of its random sampler, a run is thus reproducible with, e.g., `BOHB(dims=[Continuous(), Continuous()], random_sampler=RandomSampler(MersenneTwister(0)))`. See the docstring of `BOHB` for the remaining parameters.
 
 # Parallel execution
-- The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.
-  - `@phyperopt` accepts an optional second argument which is a `pmap`-like function. E.g. `(args...,) -> pmap(args...; on_error=...)`.
-- The macro `@thyperopt` uses `ThreadPools.tmap` to evaluate the objective on all available threads. Beware of high memory consumption if your objective allocates a lot of memory.
+- The macro `@phyperopt` works in the same way as `@hyperopt` but distributes the evaluations of the loop body over the worker processes with `Distributed.pmap`. The functions that the loop body calls must be defined on all workers, e.g., with `@everywhere`.
+- The macro `@thyperopt` evaluates the loop body in `Threads.nthreads()` tasks spawned with `Threads.@spawn`. The loop body must be safe to evaluate concurrently, and the memory consumption increases with the number of concurrent evaluations.
+
+```julia
+using Distributed
+addprocs(4)
+@everywhere using Hyperopt
+@everywhere cost(a, b) = (a - 3)^2 + (b ? 10 : 20)
+ho = @phyperopt for i = 100, a = LinRange(1, 5, 1000), b = [true, false]
+    cost(a, b)
+end
+```
+
+Both macros draw all configurations from the sampler on the calling process before the evaluations start. A worker receives the iteration index and the configuration of an evaluation and returns only the result, so the amount of data transferred per evaluation does not depend on the number of evaluations. The evaluations are recorded in `ho.history` and `ho.results` in the order of the iterations, with the same types as by `@hyperopt`; with a seeded sampler, e.g., `RandomSampler(Xoshiro(0))`, the parallel macros record the same configurations as `@hyperopt`. A run can be continued with `ho = existing_ho`, as with `@hyperopt`.
+
+`@phyperopt` accepts an optional second argument, a function with the interface of `pmap` that is called as `pmap(f, itr)`, where `itr` is an iterator of unknown length:
+```julia
+# Evaluations that throw an error are not recorded, the optimization continues
+ho = @phyperopt for i = 100, a = LinRange(1, 5, 1000), b = [true, false]
+    cost(a, b)
+end (f, itr) -> pmap(f, itr; on_error = e -> nothing)
+
+# The function that evaluates the loop body is sent to each worker only once, which reduces the transferred data if
+# the loop body refers to large local variables
+ho = @phyperopt for i = 100, a = LinRange(1, 5, 1000), b = [true, false]
+    cost(a, b)
+end (f, itr) -> pmap(f, CachingPool(workers()), itr)
+```
+
+Errors and interruptions are handled as follows:
+- If the loop body throws an error, no further evaluations are started, and the error is rethrown when the running evaluations have completed. Other tasks on the workers are not interrupted. The results obtained before the error are recorded in the `Hyperoptimizer` given with `ho = existing_ho`, if any.
+- An interruption, e.g., by Ctrl-C, stops the optimization: the iteration over the configurations ends, and the `Hyperoptimizer` with the results obtained so far is returned. The evaluations that are running, and with `@phyperopt` at most one configuration that `pmap` has received but not yet sent to a worker, are not interrupted; they complete in the background, and their results are discarded. `Distributed.interrupt()` interrupts the running evaluations, together with any other task that runs on the workers.
+
+With a `Hyperband` sampler, both macros evaluate the configurations of each rung of successive halving in parallel. With `@phyperopt`, a custom `pmap` with `on_error` must return a loss for a failed evaluation, e.g., `on_error = e -> Inf`. The function `hyperband` accepts the keyword argument `mapfun`, e.g., `mapfun = pmap`; `threads = true` corresponds to `mapfun = Hyperopt.tmap`.
