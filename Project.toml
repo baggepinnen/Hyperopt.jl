@@ -10,7 +10,6 @@ Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
-ThreadPools = "b189fb0b-2eb5-4ed4-bc0c-d34c51242431"
 
 [weakdeps]
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
@@ -30,7 +29,6 @@ Random = "1"
 RecipesBase = "0.7, 0.8, 1.0"
 Statistics = "1"
 Test = "1"
-ThreadPools = "1, 2"
 julia = "1.10"
 
 [extras]

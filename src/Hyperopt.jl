@@ -8,7 +8,6 @@ using ProgressMeter
 using MacroTools
 using RecipesBase
 using Distributed
-using ThreadPools
 using Printf
 
 """
@@ -292,107 +291,7 @@ macro hyperopt(ex)
     :(optimize($ho_))
 end
 
-function pmacrobody(ex, params, ho_, pmap=pmap)
-    quote
-        function workaround_function()
-            ho = $(ho_)
-
-            # We use a `RemoteChannel` to coordinate access to a single Hyperoptimizer object
-            # that lives on the manager process.
-            ho_channel = RemoteChannel(() -> Channel{Hyperoptimizer}(1), 1)
-
-            # We use a `deepcopy` to ensure we get the same semantics whether or not the code
-            # ends up executing on a remote process or not (i.e. always a copy). See
-            # <https://docs.julialang.org/en/v1/manual/distributed-computing/#Local-invocations>
-            put!(ho_channel, deepcopy(ho))
-
-            # pmap continues running a few lefterover jobs when interrupted, this is to stop that
-            done_channel = RemoteChannel(() -> Channel{Bool}(1), 1)
-            put!(done_channel, false)
-
-            try
-                # We don't care about the results of the `pmap` since we update the hyperoptimizer
-                # inside the loop.
-                $(esc(pmap))(1:ho.iterations) do i
-                    isdone = take!(done_channel)
-                    put!(done_channel, isdone)
-                    isdone && return
-
-                    # We take the hyperoptimizer out of the channel, and get our new parameter values
-                    local_ho = take!(ho_channel)
-                    # We use `update_history` because we want to only update the history once we've
-                    # finished the iteration and have a result to report back as well. Otherwise,
-                    # some processes may observe the Hyperoptimizer in an inconsistent state with
-                    # `length(ho.history) > length(ho.results)`. Moreover, if one run is very quick
-                    # the history and results could become out of order with respect to one another.
-                    $(Expr(:tuple, esc.(params)...)), _ = iterate(local_ho, i; update_history = false)
-                    # Now we put it back so another processor can use the hyperoptimizer
-                    put!(ho_channel, local_ho)
-
-                    # Now run the objective
-                    res = $(esc(loop_body(ex)))
-
-                    # Now update the results; we again grab the one true hyperoptimizer,
-                    # and populate it's history and result.
-                    local_ho = take!(ho_channel)
-                    push!(local_ho.history, $(Expr(:tuple, esc.(params[2:end])...)))
-                    push!(local_ho.results, res)
-                    put!(ho_channel, local_ho)
-
-                    res
-                end
-            catch e
-                take!(done_channel)
-                put!(done_channel, true)
-                interrupt() # Stop all workers
-                if e isa InterruptException
-                    @info "Aborting hyperoptimization"
-                else
-                    rethrow()
-                end
-            end
-
-            # What we get out of the channel is an updated copy of our original hyperoptimizer.
-            # So now, back on the manager process, we take it out one last time and update
-            # the original hyperoptimizer.
-            updated_ho = take!(ho_channel)
-            close(ho_channel)
-
-            # Getting the history right is tricky. For some reason, we can't do `ho.history = updated_ho.history`.
-            # Instead, we must mutate the existing `ho.history` vector. (Similarly for results).
-            empty!(ho.history)
-            append!(ho.history, updated_ho.history)
-
-            empty!(ho.results)
-            append!(ho.results, updated_ho.results)
-
-            # Do this last in case remaining runs are slow at starting so they can take the channel and stop
-            # properly without erroring (happens if accessing channel after closing)
-            close(done_channel)
-
-            ho
-        end
-        workaround_function()
-    end
-end
-
-"""
-Same as `@hyperopt` but uses `Distributed.pmap` for parallel evaluation of the cost function.
-"""
-macro phyperopt(ex, pmap=pmap)
-    pre = preprocess_expression(ex)
-    ho_ = create_ho(pre...)
-    pmacrobody(ex, pre[1], ho_, pmap)
-end
-
-"""
-Same as `@hyperopt` but uses `ThreadPools.tmap` for multithreaded evaluation of the cost function.
-"""
-macro thyperopt(ex)
-    pre = preprocess_expression(ex)
-    ho_ = create_ho(pre...)
-    pmacrobody(ex, pre[1], ho_, ThreadPools.tmap)
-end
+include("parallel.jl")
 
 """
     minimum(ho::Hyperoptimizer)

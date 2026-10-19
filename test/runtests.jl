@@ -295,6 +295,7 @@ end
         @test length(horp.results) == 100 
 
     end
+    include("test_parallel.jl")
     @testset "BOHB" begin
         @info "Testing BOHB"
         include("test_BOHB.jl")

@@ -6,31 +6,23 @@ Sample a value for each parameter uniformly at random from the candidate vectors
 Optionally, pass an `AbstractRNG` to initialize. By default, a `Xoshiro` generator is seeded with a random number drawn from the global RNG, so that `Random.seed!` makes the samples reproducible.
 """
 struct RandomSampler{T<:AbstractRNG} <: Sampler
-    rng_channel::RemoteChannel{Channel{T}}
+    # The parallel macros draw all samples on the calling process, the RNG is therefore not shared with other processes
+    rng::T
+    # Permits the concurrent use of the sampler by several tasks
     lock::ReentrantLock
 end
 
 RandomSampler() = RandomSampler(Xoshiro(rand(UInt)))
-
-function RandomSampler(rng::T) where {T <: AbstractRNG}
-    # We use a *single* RNG across threads and processors to ensure
-    # that e.g. different processors don't have different copies of the
-    # RNG.
-    channel = RemoteChannel(()->Channel{T}(1), 1)
-    put!(channel, rng)
-    return RandomSampler(channel, ReentrantLock())
-end
+RandomSampler(rng::AbstractRNG) = RandomSampler(rng, ReentrantLock())
 
 function (s::RandomSampler)(ho, iter)
-    # Lock first, since RemoteChannel's may not be threadsafe:
-    # <https://github.com/JuliaLang/julia/issues/37706>
-    return lock(s.lock) do
-        rng = take!(s.rng_channel)
-        result = [list[rand(rng, 1:length(list))] for list in ho.candidates]
-        put!(s.rng_channel, rng)
-        return result
+    with_rng(s) do rng
+        [list[rand(rng, 1:length(list))] for list in ho.candidates]
     end
 end
+
+# Calls f with the RNG of the random sampler
+with_rng(f, s::RandomSampler) = lock(() -> f(s.rng), s.lock)
 
 
 # Latin Hypercube Sampler ======================================================
@@ -314,21 +306,18 @@ end
 
 nconfigurations(hb::Hyperband) = sum(first, brackets(hb.R, hb.η))
 
-function optimize(ho::Hyperoptimizer{<:Hyperband})
+function optimize(ho::Hyperoptimizer{<:Hyperband}, mapfun = map)
     try
-        hyperband(ho)
+        hyperband(ho; mapfun)
     catch e
-        if e isa InterruptException
-            @info "Aborting hyperband"
-        else
-            rethrow(e)
-        end
+        is_interrupt(e) || rethrow()
+        @info "Aborting hyperband"
     end
     ho
 end
 
 """
-    hyperband(ho::Hyperoptimizer{Hyperband}; threads = false, mapfun = threads ? ThreadPools.tmap : map)
+    hyperband(ho::Hyperoptimizer{Hyperband}; threads = false, mapfun = threads ? Hyperopt.tmap : map)
 
 Run Hyperband with the sampler `ho.sampler` and the objective `ho.objective`, which is called as
 `ho.objective(budget, configuration...; state)` and returns `(loss, state)` or only the loss, see [`Hyperband`](@ref).
@@ -337,7 +326,7 @@ configurations of a rung, see `Hyperopt.successive_halving`.
 
 Return `ho.sampler.minimum`.
 """
-function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false, mapfun=threads ? ThreadPools.tmap : map)
+function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false, mapfun=threads ? tmap : map)
     hb = ho.sampler
     hb.R === nothing && throw(ArgumentError("Hyperband: the maximum budget R is not specified"))
     length(hb.budgets) == length(ho.results) || throw(ArgumentError("The Hyperband sampler has recorded the budgets of $(length(hb.budgets)) evaluations, but the Hyperoptimizer contains $(length(ho.results)) results. A Hyperband sampler records the evaluations of one Hyperoptimizer and cannot be used for several; construct a new sampler for each optimization, or continue an optimization with `ho = ...`."))
@@ -383,15 +372,15 @@ function lhs_plan_size(s::CLHSampler, ho)
 end
 
 """
-    successive_halving(ho, n, r = 1, s = round(Int, log(ho.sampler.η, n)); threads = false, mapfun = threads ? ThreadPools.tmap : map)
-    successive_halving(ho, n, budgets::AbstractVector; threads = false, mapfun = threads ? ThreadPools.tmap : map)
+    successive_halving(ho, n, r = 1, s = round(Int, log(ho.sampler.η, n)); threads = false, mapfun = threads ? Hyperopt.tmap : map)
+    successive_halving(ho, n, budgets::AbstractVector; threads = false, mapfun = threads ? Hyperopt.tmap : map)
 
 Run successive halving with the `Hyperband` sampler `ho.sampler`. `n` configurations are drawn from the inner sampler and
 evaluated with the budget `budgets[1]`. The fraction `1/η` of the configurations with the smallest losses is evaluated
 again with the budget `budgets[2]`, and so on. The first method uses the budgets `r * η^i` for `i = 0:s`.
 
 `mapfun(f, configurations, states)` evaluates the configurations of a rung and returns the values of `f`, e.g., `map`,
-`ThreadPools.tmap` or `Distributed.pmap`. The function `f` captures only `ho.objective` and the budget.
+`Hyperopt.tmap` or `Distributed.pmap`. The function `f` captures only `ho.objective` and the budget.
 
 Return `ho.sampler.minimum`.
 """
@@ -400,7 +389,7 @@ function successive_halving(ho, n, r::Real=1, s=round(Int, log(ho.sampler.η, n)
     successive_halving(ho, n, [r*η^i for i in 0:s]; kwargs...)
 end
 
-function successive_halving(ho, n, budgets::AbstractVector; threads=false, mapfun=threads ? ThreadPools.tmap : map)
+function successive_halving(ho, n, budgets::AbstractVector; threads=false, mapfun=threads ? tmap : map)
     hb = ho.sampler
     objective = ho.objective
     η = hb.η
@@ -450,16 +439,17 @@ function compared_indices(ho::Hyperoptimizer{Hyperband})
 end
 
 """
-    hyperband(f, candidates; R, η = 3, inner = RandomSampler(), threads = false)
+    hyperband(f, candidates; R, η = 3, inner = RandomSampler(), threads = false, mapfun = threads ? Hyperopt.tmap : map)
 
 Run Hyperband without the macro `@hyperopt` and return the `Hyperoptimizer`. `candidates` is a vector or a `NamedTuple`
 of candidate vectors, one per hyperparameter. The objective is called as `f(budget, pars)`, where `pars` is the vector
 of hyperparameter values in the first evaluation of a configuration, and the state returned by the previous evaluation
 of the same configuration otherwise. `f` returns `(loss, state)` or only the loss; in the latter case, `pars` is the
-vector of hyperparameter values in every evaluation. See [`Hyperband`](@ref) for the remaining arguments and the
+vector of hyperparameter values in every evaluation. `mapfun` evaluates the configurations of a rung, e.g.,
+`Distributed.pmap`, see `Hyperopt.successive_halving`. See [`Hyperband`](@ref) for the remaining arguments and the
 recorded results.
 """
-function hyperband(f, candidates; R, η=3, inner = RandomSampler(), threads=false)
+function hyperband(f, candidates; R, η=3, inner = RandomSampler(), threads=false, mapfun=threads ? tmap : map)
     sampler = Hyperband(; R, η, inner)
     objective(i, pars...; state = nothing) = f(i, state === nothing ? [pars...] : state)
     ho = Hyperoptimizer(;
@@ -471,7 +461,7 @@ function hyperband(f, candidates; R, η=3, inner = RandomSampler(), threads=fals
         sampler,
         objective,
     )
-    hyperband(ho; threads)
+    hyperband(ho; mapfun)
     ho
 end
 
@@ -670,18 +660,6 @@ function BOHB(; dims, N_min = nothing, ρ = 1/3, q = 0.15, N_s = 64, bw_factor =
     min_bandwidth > 0 || throw(ArgumentError("BOHB: min_bandwidth must be positive"))
     (N_min === nothing || N_min >= 1) || throw(ArgumentError("BOHB: N_min must be positive"))
     BOHB(dims, N_min, ρ, q, N_s, bw_factor, min_bandwidth, random_sampler, Dict{Float64, Vector{ObservationsRecord}}(), nothing, nothing, nothing)
-end
-
-# Calls f with the RNG of the random sampler
-function with_rng(f, s::RandomSampler)
-    lock(s.lock) do
-        rng = take!(s.rng_channel)
-        try
-            f(rng)
-        finally
-            put!(s.rng_channel, rng)
-        end
-    end
 end
 
 """
