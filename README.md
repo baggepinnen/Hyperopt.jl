@@ -260,7 +260,7 @@ bohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=BOHB(dims=[Hypero
 end
 ```
 
-When using BOHB, a Kernel Density Estimator will estimate hyperparameters that balance exploration and exploitation based on previous observations. It does this by setting the `state` variable to a tuple of the estimated set of hyperparameters, at certain points within the loop. As a consequence, the `state` returned (`Optim.minimizer(res)` in the previous example) needs to be a tuple holding the values for each hyperparameter in order (`(a, c)` in the previous example).
+When using BOHB, a Kernel Density Estimator will estimate hyperparameters that balance exploration and exploitation based on previous observations. The estimated hyperparameters are evaluated as a new configuration, i.e., they are assigned to the hyperparameter variables (`a` and `c` in the previous example) and `state === nothing`. The observations are the states returned by the loop body. As a consequence, the `state` returned (`Optim.minimizer(res)` in the previous example) needs to be a tuple holding the values for each hyperparameter in order (`(a, c)` in the previous example).
 
 Note - BOHB currently only handles `Continuous` variables, see [issue #80](https://github.com/baggepinnen/Hyperopt.jl/issues/80) for a discussion on adding support for categorical variables.
 
