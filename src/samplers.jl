@@ -137,16 +137,13 @@ function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=fal
     costfun = ho.objective
     η = hb.η
     minimum = Inf
-    T = [ hb.inner(ho, i) for i=1:n ]
+    C = [ hb.inner(ho, i) for i=1:n ] # Configurations
+    T = fill(nothing, n) # States, `nothing` for configurations that have not been evaluated
     mapfun = threads ? ThreadPools.tmap : map
     for i in 0:s
-        nᵢ = n/(η^i) # Flooring takes place below 
-        rᵢ = r*(η^i) 
-        if i == 0
-            LTend = mapfun(t->costfun(rᵢ, t...), T)
-        else
-            LTend = mapfun(t->costfun(rᵢ, t), T)
-        end
+        nᵢ = n/(η^i) # Flooring takes place below
+        rᵢ = r*(η^i)
+        LTend = mapfun((c, t)->costfun(rᵢ, c...; state=t), C, T)
         L, T = first.(LTend), last.(LTend)
         append!(ho.history, T)
         append!(ho.results, L)
@@ -158,7 +155,8 @@ function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=fal
         if L[besti] < minimum[1]
             minimum = (L[besti], rᵢ, T[besti])
         end
-        T = T[perm[1:floor(Int,nᵢ/η)]]
+        kept = perm[1:floor(Int,nᵢ/η)]
+        C, T = C[kept], T[kept]
         Base.CoreLogging.@logmsg -1 "successive_halving" progress=i/s
     end
     return minimum
@@ -167,8 +165,7 @@ end
 
 function hyperband(f, candidates; R, η=3, inner = RandomSampler(), threads=false)
     sampler = Hyperband(; R, η, inner)
-    objective(i, pars...) = f(i, [pars...]) # The objective needs two methods, accepting a vector and a list of args
-    objective(i, state) = f(i, state) 
+    objective(i, pars...; state = nothing) = f(i, state === nothing ? [pars...] : state)
     ho = Hyperoptimizer(;
         iterations = 1,
         params = [Symbol("$i") for i in eachindex(candidates)],
@@ -254,7 +251,7 @@ function (s::BOHB)(ho, iter)
     potential_samples = [sample_potential_hyperparam(s.KDE_good, s.min_bandwidth, s.bw_factor) for _ in 1:s.N_s]
     scores = [score(sample, s.KDE_good, s.KDE_bad) for sample in potential_samples]
     _, best_idx = findmax(scores)
-    [potential_samples[best_idx]]
+    potential_samples[best_idx]
 end
 
 # Sample score l(x)/g(x), refers to line 6 of Algorithm2 in paper

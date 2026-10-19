@@ -108,7 +108,9 @@ where
 `candidates` is a vector of expresions creating candidate vectors
 `sampler_` is an expression creating a sampler
 `ho_` is either nothing or an expression for an existing hyperoptimizer
-`fun` is a function from `(i, pars...) -> val` that executes the macrobody
+`fun` is a function `(i, pars...; state = nothing) -> val` that executes the macrobody
+
+The expression `ex` is not modified.
 """
 function preprocess_expression(ex)
     ex.head == :for || error("Wrong syntax, Use For-loop syntax, ex: @hyperopt for i=100, param=LinRange(1,10,100) ...")
@@ -116,43 +118,43 @@ function preprocess_expression(ex)
     candidates = []
     sampler_ = :(RandomSampler())
     ho_ = nothing
-    loop = ex.args[1].args # ex.args[1] = the arguments to the For loop
-    i = 1
-    while i <= length(loop)
-        if @capture(loop[i], sampler = sam_) # A sampler was provided
+    for arg in ex.args[1].args # ex.args[1] = the arguments to the For loop
+        if @capture(arg, sampler = sam_) # A sampler was provided
             sampler_ = sam
-            deleteat!(loop,i) # Remove the sampler from the args
-            continue
-        end
-        if @capture(loop[i], ho = h_)
+        elseif @capture(arg, ho = h_)
             ho_ = h
-            deleteat!(loop,i)
-            continue
+        else
+            @capture(arg, param_ = list_) || error("Wrong syntax, Use For-loop syntax, ex: @hyperopt for i=100, param=LinRange(1,10,100) ...")
+            push!(params, param)
+            push!(candidates, list)
         end
-        @capture(loop[i], param_ = list_) || error("Wrong syntax, Use For-loop syntax, ex: @hyperopt for i=100, param=LinRange(1,10,100) ...")
-        push!(params, param)
-        push!(candidates, list)
-        i += 1
     end
     params = (params...,)
     funname = gensym(:hyperopt_objective)
-    state_ = :(state = nothing)
-    body = ex.args[2]
-    # remove trailing LineNumberNodes from loop body as to not just return `nothing`, ref https://github.com/JuliaLang/julia/pull/41857
-    if Meta.isexpr(body, :block) && body.args[end] isa LineNumberNode
-        resize!(body.args, length(body.args) - 1)
-    end
-    fun = quote # produces a function(i, pars...)
-        function $(funname)($(Expr(:tuple, esc.(params)...))...)
-            $(esc(state_))
-            $(esc(body))
-        end
-        function $(funname)($(esc(params[1])), $(esc(:state)))
+    body = loop_body(ex)
+    # The state is a keyword argument so that a new configuration and a resumed state are
+    # not distinguished by the number of positional arguments, see `successive_halving`.
+    fun = quote
+        function $(funname)($(esc.(params)...); $(esc(:state)) = nothing)
             $(esc(body))
         end
     end
 
     params, candidates, sampler_, ho_, fun
+end
+
+"""
+Hyperopt internal function
+
+Returns the body of the for loop `ex` without a trailing `LineNumberNode`, so that the body does not evaluate to `nothing`, ref https://github.com/JuliaLang/julia/pull/41857
+The expression `ex` is not modified.
+"""
+function loop_body(ex)
+    body = ex.args[2]
+    if Meta.isexpr(body, :block) && !isempty(body.args) && body.args[end] isa LineNumberNode
+        body = Expr(:block, body.args[1:end-1]...)
+    end
+    body
 end
 
 
@@ -173,19 +175,19 @@ function optimize(ho::Hyperoptimizer)
 end
 
 function create_ho(params, candidates, sampler, ho_, objective_)
-    esccands = esc.(candidates)
-    allcands = Expr(:tuple, esccands...)
     quote
-        objective, iters = $(objective_), $(esc(candidates[1]))
-        ho = Hyperoptimizer(; iterations = iters, params = $(esc(params))[2:end], candidates = $(allcands)[2:end], sampler=$(esc(sampler)), objective)
-        if $(esc(ho_)) isa Hyperoptimizer # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
-            ho.sampler = $(esc(ho_)).sampler
-            ho.history = $(esc(ho_)).history # it's important to use the same array, not copy.
-            ho.results = $(esc(ho_)).results
+        objective = $(objective_)
+        allcands = $(Expr(:tuple, esc.(candidates)...)) # The first element is the number of iterations
+        ho = Hyperoptimizer(; iterations = allcands[1], params = $(esc(params))[2:end], candidates = allcands[2:end], sampler=$(esc(sampler)), objective)
+        existing_ho = $(esc(ho_))
+        if existing_ho isa Hyperoptimizer # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
+            ho.sampler = existing_ho.sampler
+            ho.history = existing_ho.history # it's important to use the same array, not copy.
+            ho.results = existing_ho.results
         else
             s = ho.sampler
             if s isa Hyperband
-                ho.iterations = length($(esc(candidates[end])))
+                ho.iterations = length(allcands[end])
                 s = s.inner
             end
             s isa Union{LHSampler,CLHSampler} && init!(s, ho)
@@ -238,7 +240,7 @@ function pmacrobody(ex, params, ho_, pmap=pmap)
                     put!(ho_channel, local_ho)
 
                     # Now run the objective
-                    res = $(esc(ex.args[2])) # ex.args[2] = Body of the For loop
+                    res = $(esc(loop_body(ex)))
 
                     # Now update the results; we again grab the one true hyperoptimizer,
                     # and populate it's history and result.

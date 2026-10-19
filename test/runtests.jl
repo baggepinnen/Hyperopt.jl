@@ -333,6 +333,7 @@ end
         @info "Testing BOHB"
         include("test_BOHB.jl")
     end
+    include("test_single_parameter.jl")
 
     @testset "Non-numerics" begin
         @info "Testing optimizing over non-numeric elements"
