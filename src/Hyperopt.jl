@@ -8,17 +8,47 @@ using ProgressMeter
 using MacroTools
 using RecipesBase
 using Distributed
-using LatinHypercubeSampling
 using ThreadPools
 using Printf
 
-const DimensionType = LHCDimension
+"""
+    DimensionType
 
-# # Types of dimensions
-# const CategoricalDim = Categorical
-# const ContinuousDim = Continuous
+Abstract supertype of the types `Continuous`, `Categorical` and `UnorderedCategorical`, which describe the hyperparameters for [`CLHSampler`](@ref) and [`BOHB`](@ref).
+"""
+abstract type DimensionType end
+
+"""
+    Continuous()
+
+An ordered hyperparameter, e.g., a real-valued or an integer-valued hyperparameter. [`CLHSampler`](@ref) requires the candidate vector of a `Continuous` hyperparameter to have the same length as the number of iterations.
+"""
+struct Continuous <: DimensionType end
+
+"""
+    Categorical(levels)
+
+A categorical hyperparameter with `levels` candidates. [`CLHSampler`](@ref) and [`BOHB`](@ref) treat the candidates as unordered, `Categorical(levels)` is therefore equivalent to `UnorderedCategorical(levels)`.
+"""
+struct Categorical <: DimensionType
+    levels::Int
+    function Categorical(levels::Integer)
+        levels >= 1 || throw(ArgumentError("The number of levels of a categorical dimension must be positive, got $levels"))
+        new(levels)
+    end
+end
+
+"""
+    UnorderedCategorical(levels)
+
+A categorical hyperparameter with `levels` unordered candidates, e.g., `UnorderedCategorical(3)` for `fun = [tanh, σ, relu]`. Equivalent to `Categorical(levels)`.
+"""
 struct UnorderedCategorical <: DimensionType
-    levels::Int64
+    levels::Int
+    function UnorderedCategorical(levels::Integer)
+        levels >= 1 || throw(ArgumentError("The number of levels of a categorical dimension must be positive, got $levels"))
+        new(levels)
+    end
 end
 
 abstract type Sampler end
@@ -78,7 +108,9 @@ function Hyperoptimizer(iterations::Int, sampler::Sampler = RandomSampler(); kwa
     for kw in kwargs
         push!(candidates, kw[2])
     end
-    Hyperoptimizer(iterations=iterations, params=params, candidates=candidates, sampler=sampler)
+    ho = Hyperoptimizer(iterations=iterations, params=params, candidates=candidates, sampler=sampler)
+    init!(sampler, ho)
+    ho
 end
 
 Base.length(ho::Hyperoptimizer) = ho.iterations
@@ -97,11 +129,14 @@ for (i, a, b) in ho
     push!(ho.results, f(a, b))
 end
 ```
-`ho.history[k]` and `ho.results[k]` then refer to the same evaluation. Entries at the end of `ho.history` without a corresponding entry in `ho.results`, e.g., the samples of an earlier iteration whose results were not recorded, are removed when the iteration starts (`state = 1`). Iterating over `ho` again after the results of all samples were recorded appends `ho.iterations` new samples, which corresponds to continuing the optimization.
+`ho.history[k]` and `ho.results[k]` then refer to the same evaluation. Entries at the end of `ho.history` without a corresponding entry in `ho.results`, e.g., the samples of an earlier iteration whose results were not recorded, are removed when the iteration starts (`state = 1`). Iterating over `ho` again after the results of all samples were recorded appends `ho.iterations` new samples, which corresponds to continuing the optimization. For [`LHSampler`](@ref) and [`CLHSampler`](@ref), such an iteration evaluates a new plan.
 """
 function Base.iterate(ho::Hyperoptimizer, state=1; update_history=true)
     state > ho.iterations && return nothing
-    update_history && state == 1 && discard_unevaluated!(ho)
+    if update_history && state == 1
+        discard_unevaluated!(ho)
+        start_iteration!(ho.sampler, ho)
+    end
     samples = ho.sampler(ho, state)
     update_history && push!(ho.history, samples)
     nt = (; Pair.((:i, ho.params...), (state, samples...))...)
@@ -127,7 +162,7 @@ Returns
 where
 `params` is a vector of symbols
 `candidates` is a vector of expresions creating candidate vectors
-`sampler_` is an expression creating a sampler
+`sampler_` is either nothing or an expression creating a sampler
 `ho_` is either nothing or an expression for an existing hyperoptimizer
 `fun` is a function `(i, pars...; state = nothing) -> val` that executes the macrobody
 
@@ -137,7 +172,7 @@ function preprocess_expression(ex)
     ex.head == :for || error("Wrong syntax, Use For-loop syntax, ex: @hyperopt for i=100, param=LinRange(1,10,100) ...")
     params     = []
     candidates = []
-    sampler_ = :(RandomSampler())
+    sampler_ = nothing
     ho_ = nothing
     for arg in ex.args[1].args # ex.args[1] = the arguments to the For loop
         if @capture(arg, sampler = sam_) # A sampler was provided
@@ -203,16 +238,36 @@ function optimize(ho::Hyperoptimizer)
     ho
 end
 
+"""
+    resumed_sampler(existing, given)
+
+Return the sampler of a run that resumes a `Hyperoptimizer` whose sampler is `existing`. The existing sampler is continued, so that the state of its random number generator and, e.g., the observations of `BOHB` are retained. A given sampler of another type is ignored with a warning. `given` is `nothing` if no sampler is given.
+"""
+function resumed_sampler(existing, given)
+    if given !== nothing && sampler_kind(given) != sampler_kind(existing)
+        @warn "The sampler of the existing Hyperoptimizer, $(sampler_kind(existing)), is continued; the given sampler, $(sampler_kind(given)), is ignored"
+    end
+    existing
+end
+sampler_kind(s) = string(nameof(typeof(s)))
+sampler_kind(s::Hyperband) = "Hyperband with the inner sampler $(sampler_kind(s.inner))"
+
 function create_ho(params, candidates, sampler, ho_, objective_)
     quote
         objective = $(objective_)
         allcands = $(Expr(:tuple, esc.(candidates)...)) # The first element is the number of iterations
-        ho = Hyperoptimizer(; iterations = allcands[1], params = $(esc(params))[2:end], candidates = allcands[2:end], sampler=$(esc(sampler)), objective)
+        sampler = $(esc(sampler))
         existing_ho = $(esc(ho_))
+        if existing_ho isa Hyperoptimizer
+            sampler = resumed_sampler(existing_ho.sampler, sampler)
+        elseif sampler === nothing
+            sampler = RandomSampler()
+        end
+        ho = Hyperoptimizer(; iterations = allcands[1], params = $(esc(params))[2:end], candidates = allcands[2:end], sampler, objective)
         if existing_ho isa Hyperoptimizer # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
-            ho.sampler = existing_ho.sampler
             ho.history = existing_ho.history # it's important to use the same array, not copy.
             ho.results = existing_ho.results
+            init!(ho.sampler, ho)
         else
             s = ho.sampler
             if s isa Hyperband

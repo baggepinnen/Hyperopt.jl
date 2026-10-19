@@ -36,47 +36,201 @@ end
 # Latin Hypercube Sampler ======================================================
 
 """
-Sample from a latin hypercube
+    LHSampler(; rng = Xoshiro(rand(UInt)), steps = nothing)
+
+Sample from an optimized Latin hypercube plan. The plan contains one point per iteration, and every element of each candidate vector occurs in exactly one point. All candidate vectors must therefore have the same length as the number of iterations. [`CLHSampler`](@ref) admits categorical hyperparameters with fewer candidates.
+
+The plan is obtained from a random Latin hypercube by `steps` proposed exchanges of the entries of two points in one dimension. An exchange is accepted if it reduces the Audze-Eglais potential energy of the plan, i.e., the sum of the inverse squared distances between all pairs of points, in the coordinates given by the candidate indices divided by the number of iterations. The computational cost of a step is proportional to `n*d` for `n` iterations and `d` hyperparameters. The default number of steps, `clamp(10^8 ÷ (n*d), n*d, 100*n*d)`, thus limits the cost to approximately `10^8` evaluations of coordinate differences if `n*d ≤ 10^4`. With `steps = 0`, the plan is a random Latin hypercube.
+
+The plan is drawn from `rng`. By default, a `Xoshiro` generator is seeded with a random number drawn from the global RNG, so that `Random.seed!` makes the plans reproducible.
+
+A new plan is generated for every run of `@hyperopt`, including a run that resumes an existing `Hyperoptimizer` with `ho = ...`, and for every iteration over a `Hyperoptimizer` that begins after results were recorded. The optimization of a new plan reduces the number of its points that coincide with configurations in `ho.history` with priority over the potential energy: an exchange that reduces this number is accepted, and an exchange that increases it is rejected. Configurations are thus not evaluated again if the number of steps suffices. With a single hyperparameter, however, every plan consists of all candidates.
 """
-Base.@kwdef mutable struct LHSampler <: Sampler
-    samples = zeros(0,0)
-    iters = -1
-end
-function init!(s::LHSampler, ho)
-    s.samples != zeros(0,0) && return # Already initialized
-    ndims = length(ho.candidates)
-    all(length(c) == ho.iterations for c in ho.candidates) ||
-        throw(ArgumentError("Latin hypercube sampling requires all candidate vectors to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, [length(c) for c in ho.candidates]))))) with $(ho.iterations) iterations"))
-        s.iters == -1 && (s.iters = (1000*100*2)÷ho.iterations÷ndims)
-    X, fit = LHCoptim(ho.iterations,ndims,s.iters)
-    s.samples = copy(X')
+mutable struct LHSampler{R<:AbstractRNG} <: Sampler
+    rng::R
+    steps::Union{Int, Nothing}
+    "Candidate indices of the current plan, one row per hyperparameter and one column per iteration"
+    plan::Matrix{Int}
+    "Length of `ho.results` when the current plan was generated, or -1 if no plan has been generated"
+    start::Int
 end
 
-function (s::LHSampler)(ho, iter)
-    [list[s.samples[dim,iter]] for (dim,list) in enumerate(ho.candidates)]
+function LHSampler(; rng::AbstractRNG = Xoshiro(rand(UInt)), steps::Union{Integer, Nothing} = nothing)
+    check_steps(steps)
+    LHSampler(rng, steps, zeros(Int, 0, 0), -1)
 end
 
 """
-    CLHSampler(dims=[Continuous(), Categorical(2), ...])
-Sample from a categorical/continuous latin hypercube. All continuous variables must have the same length of the candidate vectors.
+    CLHSampler(; dims, rng = Xoshiro(rand(UInt)), steps = nothing)
+
+Sample from an optimized Latin hypercube plan with continuous and categorical dimensions. `dims` contains one dimension type per hyperparameter, in the order of the candidate vectors, e.g., `dims = [Continuous(), Categorical(2), Continuous()]`:
+- `Continuous()`: the candidate vector must have the same length as the number of iterations, and every candidate occurs in exactly one point of the plan.
+- `Categorical(k)` or `UnorderedCategorical(k)`: a categorical hyperparameter with `k` candidates. In a plan with `n` points, every candidate occurs in `n ÷ k` or `n ÷ k + 1` points. Both types are treated as unordered: a categorical dimension contributes 1 to the squared distance between two points with different candidates and 0 otherwise. The optimized plan thus distributes the points that share a categorical candidate over the continuous dimensions.
+
+The keyword arguments `rng` and `steps`, and the generation of new plans are described in [`LHSampler`](@ref).
 """
-Base.@kwdef mutable struct CLHSampler <: Sampler
-    samples = zeros(0,0)
-    dims = []
-end
-function init!(s::CLHSampler, ho)
-    s.samples != zeros(0,0) && return # Already initialized
-    all(zip(s.dims, ho.candidates)) do (d,c)
-        d isa Categorical || length(c) == ho.iterations
-    end || throw(ArgumentError("Latin hypercube sampling requires all candidate vectors for Continuous variables to have the same length as the number of iterations, got lengths $(repr.(collect(zip(ho.params, length.(ho.candidates)))))"))
-    ndims = length(ho.candidates)
-    initialSample = randomLHC(ho.iterations,s.dims)
-    X,_ = LHCoptim!(initialSample, 500, dims=s.dims)
-    s.samples = copy(X')
+mutable struct CLHSampler{R<:AbstractRNG} <: Sampler
+    dims::Vector{DimensionType}
+    rng::R
+    steps::Union{Int, Nothing}
+    plan::Matrix{Int}
+    start::Int
 end
 
-function (s::CLHSampler)(ho, iter)
-    [list[s.samples[dim,iter]] for (dim,list) in enumerate(ho.candidates)]
+function CLHSampler(; dims, rng::AbstractRNG = Xoshiro(rand(UInt)), steps::Union{Integer, Nothing} = nothing)
+    for dim in dims
+        dim isa Union{Continuous, Categorical, UnorderedCategorical} ||
+            throw(ArgumentError("CLHSampler supports the dimension types Continuous, Categorical and UnorderedCategorical, got $(typeof(dim))"))
+    end
+    check_steps(steps)
+    CLHSampler(collect(DimensionType, dims), rng, steps, zeros(Int, 0, 0), -1)
+end
+
+const LatinHypercubeSampler = Union{LHSampler, CLHSampler}
+
+check_steps(steps) = (steps === nothing || steps >= 0) || throw(ArgumentError("The number of steps must be nonnegative, got $steps"))
+
+dimensions(::LHSampler, ho) = fill(Continuous(), length(ho.candidates))
+dimensions(s::CLHSampler, ho) = s.dims
+
+default_steps(n, d) = clamp(10^8 ÷ (n*d), n*d, 100*n*d)
+
+"""
+    init!(sampler, ho)
+
+Prepare `sampler` for a run of `ho` that begins at the current length of `ho.results`. A Latin hypercube sampler generates a new plan with `ho.iterations` points, other samplers are not modified.
+"""
+init!(s::Sampler, ho) = s
+
+function init!(s::LatinHypercubeSampler, ho)
+    dims = dimensions(s, ho)
+    check_candidates(dims, ho)
+    n, d = ho.iterations, length(dims)
+    X = random_plan(s.rng, dims, n)
+    if n > 1 && d > 1
+        steps = something(s.steps, default_steps(n, d))
+        optimize_plan!(s.rng, X, [dim isa Continuous for dim in dims], steps, evaluated_configurations(ho)...)
+    end
+    s.plan = X
+    s.start = length(ho.results)
+    s
+end
+
+"""
+    start_iteration!(sampler, ho)
+
+Called when an iteration over `ho` begins. A Latin hypercube sampler generates a new plan if results were recorded after its current plan was generated, other samplers are not modified.
+"""
+start_iteration!(s::Sampler, ho) = s
+
+function start_iteration!(s::LatinHypercubeSampler, ho)
+    (s.start == length(ho.results) && size(s.plan) == (length(ho.candidates), ho.iterations)) || init!(s, ho)
+    s
+end
+
+function (s::LatinHypercubeSampler)(ho, iter)
+    s.start < 0 && init!(s, ho)
+    [list[s.plan[dim, iter]] for (dim, list) in enumerate(ho.candidates)]
+end
+
+function check_candidates(dims, ho)
+    length(dims) == length(ho.candidates) ||
+        throw(ArgumentError("Latin hypercube sampling: `dims` contains $(length(dims)) dimension types, but there are $(length(ho.candidates)) hyperparameters"))
+    for (dim, c, name) in zip(dims, ho.candidates, ho.params)
+        if dim isa Continuous
+            length(c) == ho.iterations ||
+                throw(ArgumentError("Latin hypercube sampling requires the candidate vector of every continuous hyperparameter to have the same length as the number of iterations, $(ho.iterations), but the candidate vector of $name has length $(length(c))"))
+        else
+            length(c) == dim.levels ||
+                throw(ArgumentError("Latin hypercube sampling: the hyperparameter $name has the dimension type $(nameof(typeof(dim)))($(dim.levels)), but $(length(c)) candidates"))
+        end
+    end
+end
+
+# Random Latin hypercube with one row of candidate indices per dimension and one column per point
+function random_plan(rng, dims, n)
+    X = Matrix{Int}(undef, length(dims), n)
+    for (j, dim) in enumerate(dims)
+        X[j, :] = random_levels(rng, dim, n)
+    end
+    X
+end
+
+random_levels(rng, ::Continuous, n) = randperm(rng, n)
+
+function random_levels(rng, dim::Union{Categorical, UnorderedCategorical}, n)
+    order = randperm(rng, dim.levels) # Determines which levels occur once more than the others
+    shuffle!(rng, [order[mod1(i, dim.levels)] for i in 1:n])
+end
+
+# Configurations in `ho.history`, represented by candidate indices, and the index that represents each candidate.
+# Equal candidates of a hyperparameter are represented by the same index. Configurations that contain a value
+# that is not a candidate are omitted.
+function evaluated_configurations(ho)
+    lookup = [Dict(v => i for (i, v) in enumerate(c)) for c in ho.candidates]
+    representative = [[l[v] for v in c] for (l, c) in zip(lookup, ho.candidates)]
+    evaluated = Set{Vector{Int}}()
+    for h in ho.history
+        (h isa Union{AbstractVector, Tuple} && length(h) == length(lookup)) || continue
+        x = [get(l, v, 0) for (l, v) in zip(lookup, h)]
+        0 in x || push!(evaluated, x)
+    end
+    representative, evaluated
+end
+
+# Squared difference of the coordinates of the candidate indices x and y in a dimension of a plan with n points
+coordinate_distance2(continuous::Bool, x, y, n) = continuous ? ((x - y) / n)^2 : Float64(x != y)
+
+function squared_distance(X, continuous, a, b)
+    n = size(X, 2)
+    s = 0.0
+    @inbounds for j in axes(X, 1)
+        s += coordinate_distance2(continuous[j], X[j, a], X[j, b], n)
+    end
+    s
+end
+
+# Contribution of a pair of points with the squared distance s to the potential energy. The lower bound of the
+# squared distance is smaller than any positive squared distance and only applies to coincident points, which
+# occur if all dimensions are categorical.
+pair_potential(s, n) = 1 / max(s, 1 / (4n^2))
+
+"""
+    optimize_plan!(rng, X, continuous, steps, representative, evaluated)
+
+Optimize the plan `X` by `steps` proposed exchanges of two entries in a row, see [`LHSampler`](@ref). `continuous[j]` indicates whether dimension `j` is continuous. The candidate index `i` of dimension `j` is represented by `representative[j][i]` in the set `evaluated` of configurations that are not to be evaluated again.
+"""
+function optimize_plan!(rng, X, continuous, steps, representative, evaluated)
+    d, n = size(X)
+    x = Vector{Int}(undef, d)
+    function nevaluated(points...)
+        isempty(evaluated) && return 0
+        count(points) do i
+            for j in 1:d
+                x[j] = representative[j][X[j, i]]
+            end
+            x in evaluated
+        end
+    end
+    for _ in 1:steps
+        j, a, b = rand(rng, 1:d), rand(rng, 1:n), rand(rng, 1:n)
+        X[j, a] == X[j, b] && continue
+        Δ = 0.0 # Change of the potential energy by the exchange
+        for k in 1:n
+            (k == a || k == b) && continue
+            sa, sb = squared_distance(X, continuous, a, k), squared_distance(X, continuous, b, k)
+            ca = coordinate_distance2(continuous[j], X[j, a], X[j, k], n)
+            cb = coordinate_distance2(continuous[j], X[j, b], X[j, k], n)
+            Δ += pair_potential(sa - ca + cb, n) + pair_potential(sb - cb + ca, n) - pair_potential(sa, n) - pair_potential(sb, n)
+        end
+        before = nevaluated(a, b)
+        X[j, a], X[j, b] = X[j, b], X[j, a]
+        after = nevaluated(a, b)
+        if after > before || (after == before && Δ >= 0)
+            X[j, a], X[j, b] = X[j, b], X[j, a]
+        end
+    end
+    X
 end
 
 

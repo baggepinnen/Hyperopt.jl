@@ -33,6 +33,7 @@ end
 3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below).
 4. A useful strategy to achieve log-uniform sampling is logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`.
 5. In the example below, the parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
+6. An optimization is resumed by passing the existing `Hyperoptimizer` with the special keyword `ho`, e.g., `@hyperopt for i=20, ho=ho, a = LinRange(1,2,1000), ...`. The new samples and results are appended to `ho.history` and `ho.results`. The sampler of the existing `Hyperoptimizer` is continued, including the state of its random number generator. A sampler given in the resumed call is not used, and a warning is emitted if it is of another type than the existing sampler.
 
 The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and has `minimum/minimizer` and `maximum/maximizer` properties (e.g., `ho.minimizer`). It can also be plotted using `plot(ho)` (uses `Plots.jl`). The exact syntax to use for various samplers is shown in the [testfile](https://github.com/baggepinnen/Hyperopt.jl/blob/master/test/runtests.jl), which should be fairly readable.
 
@@ -131,7 +132,7 @@ end
 When an iteration over `ho` starts, the samples at the end of `ho.history` without a corresponding entry in `ho.results` are removed, so iterating over `ho` several times does not accumulate samples that were never evaluated.
 
 # Categorical variables
-`RandomSampler` and `CLHSampler` support categorical variables which do not have a natural floating point representation, such as functions:
+`RandomSampler` and `CLHSampler` support categorical variables which do not have a natural floating point representation, such as functions. For `CLHSampler`, a categorical variable with `n` candidates is declared as `Categorical(n)` or, equivalently, `UnorderedCategorical(n)`; both are treated as unordered:
 ```julia
 @hyperopt for i=20, fun = [tanh, σ, relu]
     train_network(fun)
@@ -147,7 +148,7 @@ end
 # Which sampler to use?
 `RandomSampler` is a good baseline and the default if none is chosen. `Hyperband(R=50, η=3, inner=RandomSampler())` runs the expression with varying amount of resources, allocating more resources to promising hyperparameters. See below for more info on `Hyperband`.
 
-If number of iterations is small, `LHSampler` work better than random search. Caveat: `LHSampler` needs all candidate vectors to be of equal length, i.e.,
+If the number of iterations is small, `LHSampler` works better than random search. `LHSampler` evaluates an optimized [Latin hypercube](https://en.wikipedia.org/wiki/Latin_hypercube_sampling) plan, in which every candidate of each hyperparameter occurs exactly once. Caveat: `LHSampler` needs all candidate vectors to be of equal length, i.e.,
 ```julia
 hob = @hyperopt for i=100, sampler = LHSampler(),
                             a = LinRange(1,5,100),
@@ -168,6 +169,9 @@ hob = @hyperopt for i=100,
     f(a,b,c=c)
 end
 ```
+Here, each candidate of `b` occurs in 50 points of the plan, and the plan distributes the points with `b = true`, as well as those with `b = false`, over the ranges of `a` and `c`.
+
+Both samplers accept the keyword arguments `rng`, the random number generator from which the plans are drawn, e.g., `LHSampler(rng=Xoshiro(0))` for a reproducible plan, and `steps`, the number of proposed exchanges of entries in the optimization of the plan, see the docstring of `LHSampler`. Every run, including a resumed run with `ho = ...`, evaluates a new plan, whose points are chosen such that they do not coincide with configurations that were evaluated before, if possible.
 
 
 ## Hyperband
