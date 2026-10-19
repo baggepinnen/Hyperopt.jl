@@ -175,10 +175,9 @@ function optimize(ho::Hyperoptimizer)
 end
 
 function create_ho(params, candidates, sampler, ho_, objective_)
-    allcands = Expr(:tuple, esc.(candidates)...)
     quote
         objective = $(objective_)
-        allcands = $(allcands) # The first element is the number of iterations
+        allcands = $(Expr(:tuple, esc.(candidates)...)) # The first element is the number of iterations
         ho = Hyperoptimizer(; iterations = allcands[1], params = $(esc(params))[2:end], candidates = allcands[2:end], sampler=$(esc(sampler)), objective)
         existing_ho = $(esc(ho_))
         if existing_ho isa Hyperoptimizer # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
