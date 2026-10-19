@@ -1,3 +1,10 @@
+"""
+Hyperparameter optimization by random search, Latin hypercube sampling, Hyperband and BOHB.
+
+The main interface is the macro [`@hyperopt`](@ref), which evaluates the body of a for loop for configurations of the
+hyperparameters and returns a [`Hyperoptimizer`](@ref) that records the configurations and the results. The
+documentation is available at <https://baggepinnen.github.io/Hyperopt.jl/stable/>.
+"""
 module Hyperopt
 
 export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax, warn_on_boundary
@@ -20,14 +27,14 @@ abstract type DimensionType end
 """
     Continuous()
 
-An ordered hyperparameter, e.g., a real-valued or an integer-valued hyperparameter. [`CLHSampler`](@ref) requires the candidate vector of a `Continuous` hyperparameter to have the same length as the number of iterations.
+An ordered hyperparameter, e.g., a real-valued or an integer-valued hyperparameter. [`CLHSampler`](@ref) requires the candidate vector of a `Continuous` hyperparameter to have the same length as the number of iterations. [`BOHB`](@ref) requires real-valued candidates and estimates the densities in the coordinate given by the index into the sorted candidate vector.
 """
 struct Continuous <: DimensionType end
 
 """
     Categorical(levels)
 
-A categorical hyperparameter with `levels` candidates. [`CLHSampler`](@ref) and [`BOHB`](@ref) treat the candidates as unordered, `Categorical(levels)` is therefore equivalent to `UnorderedCategorical(levels)`.
+A categorical hyperparameter with `levels` candidates, i.e., its candidate vector has `levels` elements. [`CLHSampler`](@ref) and [`BOHB`](@ref) treat the candidates as unordered, `Categorical(levels)` is therefore equivalent to `UnorderedCategorical(levels)`.
 """
 struct Categorical <: DimensionType
     levels::Int
@@ -40,7 +47,7 @@ end
 """
     UnorderedCategorical(levels)
 
-A categorical hyperparameter with `levels` unordered candidates, e.g., `UnorderedCategorical(3)` for `fun = [tanh, σ, relu]`. Equivalent to `Categorical(levels)`.
+A categorical hyperparameter with `levels` unordered candidates, e.g., `UnorderedCategorical(3)` for `fun = [tanh, sin, cos]`. Equivalent to [`Categorical(levels)`](@ref Categorical).
 """
 struct UnorderedCategorical <: DimensionType
     levels::Int
@@ -51,6 +58,60 @@ struct UnorderedCategorical <: DimensionType
 end
 
 abstract type Sampler end
+
+"""
+    Hyperoptimizer(iterations, sampler = RandomSampler(); name1 = candidates1, name2 = candidates2, ...)
+    Hyperoptimizer(; iterations, params, candidates, history = [], results = [], sampler = RandomSampler(), objective = nothing)
+
+Specification and record of a hyperparameter optimization. [`@hyperopt`](@ref) constructs and returns a
+`Hyperoptimizer`.
+
+The first constructor creates a `Hyperoptimizer` for manual iteration. The keyword arguments name the hyperparameters
+and give their candidate vectors. Each iteration over the `Hyperoptimizer` draws a configuration from the sampler,
+appends it to `ho.history` and yields it as a `NamedTuple` `(; i, name1, name2, ...)`, where `i` is the index of the
+iteration. The result of each configuration is to be appended to `ho.results` by the caller:
+```julia
+ho = Hyperoptimizer(10, a = LinRange(1, 2, 50), b = [true, false])
+for (i, a, b) in ho
+    push!(ho.results, cost(a, b))
+end
+```
+See [`iterate`](@ref Base.iterate(::Hyperoptimizer)) for the semantics of repeated iteration. The second
+constructor sets the fields directly.
+
+# Fields
+- `iterations::Int`: The number of configurations that one run draws, i.e., one execution of `@hyperopt` or one
+  iteration over the `Hyperoptimizer`. With a [`Hyperband`](@ref) sampler, [`hyperband`](@ref) sets it to the number
+  of configurations that one run of Hyperband draws from the inner sampler.
+- `params`: The names of the hyperparameters, as symbols.
+- `candidates`: The candidate vectors, one per hyperparameter, in the order of `params`.
+- `history`: The evaluated configurations. `history[k]` contains one value per hyperparameter, in the order of
+  `params`.
+- `results`: The results of the evaluations. `results[k]` is the result of the evaluation of the configuration
+  `history[k]`.
+- `sampler`: The sampler, e.g., [`RandomSampler`](@ref), [`LHSampler`](@ref), [`CLHSampler`](@ref) or
+  [`Hyperband`](@ref).
+- `objective`: The function that `@hyperopt` generates from the loop body, called as
+  `objective(i, values...; state)`, or `nothing` for a `Hyperoptimizer` that is iterated manually.
+
+# Properties
+- `ho.minimum`: The smallest result.
+- `ho.minimizer`: The configuration of the smallest result, an element of `ho.history`.
+- `ho.maximum`: The largest result.
+- `ho.maximizer`: The configuration of the largest result, an element of `ho.history`.
+
+These properties compare the elements of `ho.results`. A `NaN` result, e.g., of an evaluation that failed, is treated
+as `Inf` by `minimum` and `minimizer` and as `-Inf` by `maximum` and `maximizer`; it is therefore selected only if all
+compared results are `NaN`, in which case `ho.minimum` is `Inf` and `ho.maximum` is `-Inf`. If `ho.results` is
+empty, `ho.minimum` and `ho.maximum` are `NaN`, and `ho.minimizer` and `ho.maximizer` are empty vectors.
+With a [`Hyperband`](@ref) sampler, only the results obtained with the largest budget in `ho.sampler.budgets` are
+compared, since results obtained with different budgets are not comparable.
+
+`minimum(ho)` and `maximum(ho)` are equivalent to `ho.minimum` and `ho.maximum`. [`printmin`](@ref) and
+[`printmax`](@ref) print the minimizer and the maximizer, and [`warn_on_boundary`](@ref) reports hyperparameters
+whose optimal value is located on the boundary of the sampled values. If Plots.jl is loaded, `plot(ho)` plots the
+results against the value of each hyperparameter.
+"""
 Base.@kwdef mutable struct Hyperoptimizer{S<:Sampler, F, P, C}
     iterations::Int
     params::P
@@ -167,7 +228,7 @@ Returns
 `params, candidates, sampler_, ho_, fun`
 where
 `params` is a vector of symbols
-`candidates` is a vector of expresions creating candidate vectors
+`candidates` is a vector of expressions creating candidate vectors
 `sampler_` is either nothing or an expression creating a sampler
 `ho_` is either nothing or an expression for an existing hyperoptimizer
 `fun` is a function `(i, pars...; state = nothing) -> val` that executes the macrobody
@@ -285,6 +346,60 @@ function create_ho(params, candidates, sampler, ho_, objective_)
     end
 end
 
+"""
+    ho = @hyperopt for i = n, [sampler = RandomSampler(),] [ho = existing_ho,] name1 = candidates1, name2 = candidates2, ...
+        loop body
+    end
+
+Evaluate the loop body for configurations of the hyperparameters `name1, name2, ...` drawn from the candidate vectors
+`candidates1, candidates2, ...`, and return the [`Hyperoptimizer`](@ref) `ho` that records the configurations in
+`ho.history` and the results in `ho.results`. The optimal configuration is obtained with `ho.minimizer`, see
+[`Hyperoptimizer`](@ref).
+
+The arguments of the for loop are:
+- `i = n`: The first argument. Without [`Hyperband`](@ref), `n` is the number of iterations, i.e., the number of
+  configurations that are drawn and evaluated, and `i` holds the index of the current iteration. With a `Hyperband`
+  sampler, `n` is the maximum budget `R`, and `i` holds the budget of the current evaluation. Any variable name can be
+  used instead of `i`.
+- `sampler = s` (optional): The sampler that draws the configurations: [`RandomSampler`](@ref) (the default),
+  [`LHSampler`](@ref), [`CLHSampler`](@ref) or [`Hyperband`](@ref).
+- `ho = existing_ho` (optional): A `Hyperoptimizer` whose optimization is continued. The configurations and results of
+  the new run are appended to `existing_ho.history` and `existing_ho.results`, which the returned `Hyperoptimizer`
+  shares with `existing_ho`. The sampler of `existing_ho` is continued, including the state of its random number
+  generator and, for [`BOHB`](@ref), its observations. A sampler given with `sampler = s` is not used, and a warning is
+  emitted if it is of another type than the sampler of `existing_ho`.
+- `name = candidates`: One argument per hyperparameter. `candidates` is a vector of the values that the hyperparameter
+  can take, e.g., `LinRange(1, 5, 100)`, `exp10.(LinRange(-3, 1, 100))` for logarithmically spaced values,
+  `[true, false]` or `[tanh, sin]`. In the loop body, the variable `name` holds the value of the hyperparameter.
+
+The names `sampler` and `ho` are reserved and cannot be used as names of hyperparameters.
+
+The loop body becomes the body of a function whose arguments are the first loop variable and the hyperparameters;
+variables of the enclosing scope are accessible as in a closure. The keyword argument `state` of this function is
+also accessible in the loop body; it is `nothing` unless the sampler is a `Hyperband` sampler.
+
+The value of the loop body is the result of the evaluation:
+- Without `Hyperband`, the result is appended to `ho.results`. The result is typically a real-valued cost, which
+  `ho.minimum` and `ho.minimizer` minimize.
+- With `Hyperband`, the loop body returns a tuple `(loss, state)`, where `state` is any object from which a later
+  evaluation of the same configuration with a larger budget can resume, or only the real-valued loss. The loss is
+  appended to `ho.results`, and the state is passed to the next evaluation of the configuration as the keyword
+  argument `state`. See [`Hyperband`](@ref).
+
+If an evaluation throws an `InterruptException`, e.g., after Ctrl-C, the optimization is stopped and `ho` is returned
+with the results obtained so far. Other exceptions are rethrown. A progress meter is displayed unless
+[`Hyperopt.SHOW_PROGRESS[]`](@ref Hyperopt.SHOW_PROGRESS) is `false`. The macros [`@phyperopt`](@ref) and
+[`@thyperopt`](@ref) evaluate the loop body in parallel.
+
+# Example
+```julia
+cost(a, b, c) = (a - 3)^2 + (b ? 10 : 20) + (log10(c) - 2)^2
+ho = @hyperopt for i = 50, sampler = RandomSampler(), a = LinRange(1, 5, 1000), b = [true, false], c = exp10.(LinRange(-1, 3, 1000))
+    cost(a, b, c)
+end
+ho.minimum, ho.minimizer
+```
+"""
 macro hyperopt(ex)
     pre = preprocess_expression(ex)
     ho_ = create_ho(pre...)
@@ -310,9 +425,11 @@ With a [`Hyperband`](@ref) sampler, only the results obtained with the largest b
 Base.maximum(ho::Hyperoptimizer) = ho.maximum
 
 """
-    printmin([io=stdout,] ho)
+    printmin([io = stdout,] ho)
 
-Prints the parameters that minimized the function.
+Print the name and the value of each hyperparameter of the configuration `ho.minimizer`, one hyperparameter per line.
+With a [`Hyperband`](@ref) sampler, the configuration is the minimizer among the results obtained with the largest
+budget, see [`Hyperoptimizer`](@ref).
 """
 printmin(ho::Hyperoptimizer) = printmin(stdout, ho)
 function printmin(io::IO, ho::Hyperoptimizer)
@@ -322,9 +439,11 @@ function printmin(io::IO, ho::Hyperoptimizer)
 end
 
 """
-    printmax([io=stdout,] ho)
+    printmax([io = stdout,] ho)
 
-Prints the parameters that maximized the function.
+Print the name and the value of each hyperparameter of the configuration `ho.maximizer`, one hyperparameter per line.
+With a [`Hyperband`](@ref) sampler, the configuration is the maximizer among the results obtained with the largest
+budget, see [`Hyperoptimizer`](@ref).
 """
 printmax(ho::Hyperoptimizer) = printmax(stdout, ho)
 function printmax(io::IO, ho::Hyperoptimizer)
@@ -336,14 +455,16 @@ end
 """
     warn_on_boundary(ho, sense = :min)
 
-Emit a warning for each parameter where the optimum was obtained on an extreme point of the sampled space, and return the names of these parameters.
+Emit a warning for each hyperparameter whose value in the optimal configuration is the smallest or the largest value
+of this hyperparameter in `ho.history`, and return the names of these hyperparameters as a vector of symbols. The
+optimal configuration is `ho.minimizer` if `sense = :min`, and `ho.maximizer` otherwise.
 
-Example: If parameter `a` can take values in 1:10 and the optimum was obtained at
-`a = 1`, it's an indication that the parameter was constrained by the search space.
-The warning is effective even if the lowest value of `a` that was sampled was higher than 1,
-but the optimum occurred on the lowest sampled value.
+Example: if the hyperparameter `a` has the candidates `1:10` and the optimum is obtained with `a = 1`, the optimum may
+be located outside of the candidate range, and the range is to be extended. The warning is also emitted if the
+smallest sampled value of `a` is larger than 1 and the optimum is obtained with this value.
 
-Only parameters whose candidates are real numbers with more than three distinct values are considered, since categorical candidates have no order.
+Only hyperparameters whose candidates are real numbers with more than three distinct values are considered, since
+categorical candidates have no order.
 """
 function warn_on_boundary(ho, sense = :min)
     m = sense == :min ? ho.minimizer : ho.maximizer
@@ -364,24 +485,24 @@ include("plotting.jl")
 """
     hyperoptim(f, candidates, algorithm = Optim.NelderMead(), opts = Optim.Options(); R = 30, η = 3, inner = RandomSampler(), threads = true, verbose = false, Rmin = 0.1, kwargs...)
 
-Multi-start optimization with Optim and Hyperband. The interface is similar to that of `Optim.optimize`, but the initial guess is replaced by a vector of candidate vectors. The resources are used to set the allowed time for optimization by `Optim.optimize`. An evaluation with a larger budget continues the optimization from the minimizer found by the previous evaluation of the same initial guess.
+Multi-start optimization with Optim and Hyperband. The interface is similar to that of `Optim.optimize`, but the initial guess is replaced by candidate vectors, one per element of the initial guess, from which [`hyperband`](@ref) draws initial guesses. The budget of an evaluation is the time limit in seconds of a call to `Optim.optimize`. An evaluation with a larger budget continues the optimization from the minimizer found by the previous evaluation of the same initial guess.
 
 Returns the `Hyperoptimizer` `ho`. `ho.minimum` is the smallest value of `f` found with the largest budget, `ho.minimizer` is the initial guess from which this value was found, and `ho.sampler.minimum.state` is the corresponding minimizer of `f`.
 
 This function requires Optim.jl to be loaded, i.e., `using Optim`.
 
 # Arguments:
-- `f` a function from `Rⁿ -> R`, i.e., it takes a vector of parameters.
-- `candidates`: A vector of vectors
-- `algorithm`: One of the Optim algorithms
-- `opts`: `Optim.Options`. The field `time_limit` is replaced by the resources allocated to each call to `Optim.optimize`.
+- `f`: A function from `Rⁿ` to `R`, i.e., it takes a vector of parameters.
+- `candidates`: A vector or a `NamedTuple` of candidate vectors, one per element of the vector of parameters.
+- `algorithm`: One of the Optim algorithms.
+- `opts`: `Optim.Options`. The field `time_limit` is replaced by the budget of each call to `Optim.optimize`.
+- `R`: The maximum budget, i.e., the largest time limit in seconds.
+- `η`: The ratio of the budgets of successive rounds of successive halving, see [`Hyperband`](@ref).
 - `inner`: The inner sampler
 - `threads`: Use threading to evaluate the cost function
-- `verbose`: Print the resources and the minimum after each call to `Optim.optimize`.
-- `Rmin`: The minimum amount of resources to use.
+- `verbose`: Print the budget and the minimum after each call to `Optim.optimize`.
+- `Rmin`: The smallest time limit in seconds; smaller budgets are replaced by `Rmin`.
 - `kwargs`: Are sent to `Optim.optimize`.
-
-See `?hyperband` for the remaining arguments.
 """
 function hyperoptim end
 
