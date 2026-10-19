@@ -2,16 +2,24 @@
 
 [![CI](https://github.com/baggepinnen/Hyperopt.jl/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/baggepinnen/Hyperopt.jl/actions/workflows/ci.yml?query=branch%3Amaster)
 [![codecov](https://codecov.io/gh/baggepinnen/Hyperopt.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/baggepinnen/Hyperopt.jl)
+[![Documentation, stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://baggepinnen.github.io/Hyperopt.jl/stable/)
+[![Documentation, development version](https://img.shields.io/badge/docs-dev-blue.svg)](https://baggepinnen.github.io/Hyperopt.jl/dev/)
 
 
-A package to perform hyperparameter optimization. Currently supports random search, [latin hypercube sampling](https://en.wikipedia.org/wiki/Latin_hypercube_sampling) and [Bayesian optimization](https://arxiv.org/abs/1807.02811).
+A package to perform hyperparameter optimization. Currently supports
+- random search,
+- [Latin hypercube sampling](https://en.wikipedia.org/wiki/Latin_hypercube_sampling), with continuous and categorical hyperparameters,
+- [Hyperband](https://arxiv.org/abs/1603.06560), which evaluates many configurations with a small budget and the most promising configurations with larger budgets,
+- [BOHB](https://arxiv.org/abs/1807.01774), which combines Hyperband with model-based sampling of the configurations.
+
+The [documentation](https://baggepinnen.github.io/Hyperopt.jl/stable/) contains executed examples of all samplers, the function interface, multi-start optimization with Optim.jl and plotting, as well as the API reference. If you use Hyperopt.jl in academic work, please cite it using the entry in [CITATION.bib](CITATION.bib).
 
 # Usage
 
-This package was designed to facilitate the addition of optimization logic to already existing code. I usually write some code and try a few hyper parameters by hand before I realize I have to take a more structured approach to finding good hyper parameters. I therefore designed this package such that the optimization logic is wrapped around existing code, and the user only has to specify which variables to optimize and candidate values (ranges) for these variables.
+This package was designed to facilitate the addition of optimization logic to already existing code. I usually write some code and try a few hyperparameters by hand before I realize I have to take a more structured approach to finding good hyperparameters. I therefore designed this package such that the optimization logic is wrapped around existing code, and the user only has to specify which variables to optimize and candidate values (ranges) for these variables.
 
 ## High-level example
-In order to add hyper-parameter optimization to the existing pseudo code
+In order to add hyperparameter optimization to the existing pseudo code
 ```julia
 a = manually_selected_value
 b = other_value
@@ -28,14 +36,14 @@ end
 
 ## Details
 
-1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below). With `Hyperband`, the initial argument holds the budget of each evaluation instead, see [Hyperband](#hyperband).
-2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])`, `Hyperband(R=50, η=3, inner=RandomSampler())`.
-3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below).
-4. A useful strategy to achieve log-uniform sampling is logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`.
-5. In the example below, the parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration.
-6. An optimization is resumed by passing the existing `Hyperoptimizer` with the special keyword `ho`, e.g., `@hyperopt for i=20, ho=ho, a = LinRange(1,2,1000), ...`. The new samples and results are appended to `ho.history` and `ho.results`. The sampler of the existing `Hyperoptimizer` is continued, including the state of its random number generator. A sampler given in the resumed call is not used, and a warning is emitted if it is of another type than the existing sampler.
+1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below). With `Hyperband`, the initial argument holds the budget of each evaluation instead, and its value is the maximum budget, see [Hyperband](#hyperband).
+2. The sample strategy is selected with the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])` and `Hyperband(η=3, inner=RandomSampler())`.
+3. The subsequent arguments to the for-loop specify names and candidate values for different hyperparameters (`a = LinRange(1,5,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below).
+4. Log-uniform sampling is obtained with a logarithmically spaced candidate vector, e.g., `c = exp10.(LinRange(-1,3,1000))`.
+5. In the example below, the parameters `i,a,b,c` can be used within the expression sent to the macro and they will hold a new value sampled from the corresponding candidate vector each iteration. The value of the expression is the result of the iteration, which is to be minimized.
+6. An optimization is resumed by passing the existing `Hyperoptimizer` with the special keyword `ho`, e.g., `@hyperopt for i=20, ho=ho, a = LinRange(1,5,1000), ...`. The new samples and results are appended to `ho.history` and `ho.results`. The sampler of the existing `Hyperoptimizer` is continued, including the state of its random number generator. A sampler given in the resumed call is not used, and a warning is emitted if it is of another type than the existing sampler.
 
-The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and has `minimum/minimizer` and `maximum/maximizer` properties (e.g., `ho.minimizer`). It can also be plotted using `plot(ho)` (uses `Plots.jl`). The exact syntax to use for various samplers is shown in the [testfile](https://github.com/baggepinnen/Hyperopt.jl/blob/master/test/runtests.jl), which should be fairly readable.
+The resulting object `ho::Hyperoptimizer` holds all the sampled parameters and function values and has `minimum/minimizer` and `maximum/maximizer` properties (e.g., `ho.minimizer`). A `NaN` result is treated as `Inf` by `minimum/minimizer` and as `-Inf` by `maximum/maximizer`. The `Hyperoptimizer` can also be plotted using `plot(ho)` (uses `Plots.jl`). See the docstrings of `@hyperopt` and `Hyperoptimizer` and the [documentation](https://baggepinnen.github.io/Hyperopt.jl/stable/) for details.
 
 
 ## Full example
@@ -54,41 +62,36 @@ ho = @hyperopt for i=50,
    x = 100
    @show f(x,a,b,c=c)
 end
-1   3.910910910910911   false   0.15282140360258697     f(x, a, b, c=c) = 10090.288832348499
-2   3.930930930930931   true    6.1629662551329405      f(x, a, b, c=c) = 8916.255534433481
-3   2.7617617617617616  true    146.94918006248173      f(x, a, b, c=c) = 2314.282265997491
-4   3.6666666666666665  false   0.3165924111983522      f(x, a, b, c=c) = 10057.226192959602
-5   4.783783783783784   true    34.55719936762139       f(x, a, b, c=c) = 4395.942039196544
-6   2.5895895895895897  true    4.985373463873895       f(x, a, b, c=c) = 9137.947692504491
-7   1.6206206206206206  false   301.6334347259197       f(x, a, b, c=c) = 40777.94468684398
-8   1.012012012012012   true    33.00034791125285       f(x, a, b, c=c) = 4602.905476253546
-9   3.3583583583583585  true    193.7703337477989       f(x, a, b, c=c) = 8903.003911886599
-10  4.903903903903904   true    144.26439512181574      f(x, a, b, c=c) = 2072.9615255755252
-11  2.2332332332332334  false   119.97177354358843      f(x, a, b, c=c) = 519.4596697509966
-12  2.369369369369369   false   117.77987011971193      f(x, a, b, c=c) = 436.52147646611473
-13  3.2182182182182184  false   105.44427935261685      f(x, a, b, c=c) = 149.68779686009242
+1	2.1771771771771773	false	0.2445616683452446   	f(x, a, b, c = c) = 10071.824514138334
+2	4.643643643643644	true	0.26328154656480207   	f(x, a, b, c = c) = 10060.114572287093
+3	4.1391391391391394	true	132.7770829355429   	f(x, a, b, c = c) = 1185.6348037417756
+4	4.45945945945946	true	794.145171902934   	f(x, a, b, c = c) = 481949.6496980675
+5	3.5065065065065064	true	0.9310413487069078   	f(x, a, b, c = c) = 9924.915117092753
 ⋮
-
-Hyperopt.Hyperoptimizer
-  iterations: Int64 50
-  params: Tuple{Symbol,Symbol,Symbol}
-  candidates: Array{AbstractArray{T,1} where T}((3,))
-  history: Array{Any}((50,))
-  results: Array{Any}((50,))
-  sampler: Hyperopt.RandomSampler
+50	3.754754754754755	true	0.12945299782279157   	f(x, a, b, c = c) = 10084.695813253911
+Hyperoptimizer with
+  a length: 1000
+  b length: Bool[1, 0]
+  c length: 1000
+  minimum / maximum: (128.7764050750981, 570037.3595670203)
+  minimizer:
+        a         b         c
+     3.25         0     97.05
 
 
 julia> best_params, min_f = ho.minimizer, ho.minimum
-(Real[1.62062, true, 100.694], 112.38413353985818)
+(Real[3.25025025025025, false, 97.04808877380302], 128.7764050750981)
 
 julia> printmin(ho)
-a = 1.62062
-b = true
-c = 100.694
+a = 3.25025025025025
+b = false
+c = 97.04808877380302
 ```
+The samples are random, the printed values therefore differ between runs.
 
 We can also visualize the result by plotting the hyperoptimizer
-```
+```julia
+using Plots
 plot(ho)
 ```
 ![window](figs/ho.svg)
@@ -101,27 +104,8 @@ This may allow us to determine which parameters are most important for the perfo
 Hyperopt.SHOW_PROGRESS[] = false
 ```
 
-
-The type `Hyperoptimizer` is iterable, it iterates for the specified number of iterations, each iteration providing a sample of the parameter vector, e.g.
-```julia
-ho = Hyperoptimizer(10, a = LinRange(1,2,50), b = [true, false], c = randn(100))
-for (i,a,b,c) in ho
-    println(i, "\t", a, "\t", b, "\t", c)
-end
-
-1   1.2244897959183674  false   0.8179751164732062
-2   1.7142857142857142  true    0.6536272580487854
-3   1.4285714285714286  true    -0.2737451706680355
-4   1.6734693877551021  false   -0.12313108128547606
-5   1.9795918367346939  false   -0.4350837079334295
-6   1.0612244897959184  true    -0.2025613848798039
-7   1.469387755102041   false   0.7464858339748051
-8   1.8571428571428572  true    -0.9269021128132274
-9   1.163265306122449   true    2.6554272337516966
-10  1.4081632653061225  true    1.112896676939024
-```
-
-Each iteration appends the sample to `ho.history`. If used in this way, the hyperoptimizer **can not** keep track of the function values like it did when `@hyperopt` was used. To manually store the same data, append each result to `ho.results`:
+## Manual iteration
+The type `Hyperoptimizer` is iterable, it iterates for the specified number of iterations, each iteration providing a sample of the parameter vector. Each iteration appends the sample to `ho.history`; the result of each sample is to be appended to `ho.results` by the caller:
 ```julia
 ho = Hyperoptimizer(10, a = LinRange(1,2,50), b = [true, false], c = randn(100))
 for (i,a,b,c) in ho
@@ -129,24 +113,24 @@ for (i,a,b,c) in ho
     push!(ho.results, res)
 end
 ```
-When an iteration over `ho` starts, the samples at the end of `ho.history` without a corresponding entry in `ho.results` are removed, so iterating over `ho` several times does not accumulate samples that were never evaluated.
+See the [documentation](https://baggepinnen.github.io/Hyperopt.jl/stable/function_interface/) for the semantics of repeated iteration.
 
 # Categorical variables
 `RandomSampler` and `CLHSampler` support categorical variables which do not have a natural floating point representation, such as functions. For `CLHSampler`, a categorical variable with `n` candidates is declared as `Categorical(n)` or, equivalently, `UnorderedCategorical(n)`; both are treated as unordered:
 ```julia
-@hyperopt for i=20, fun = [tanh, σ, relu]
-    train_network(fun)
+@hyperopt for i=20, fun = [tanh, sin, cos]
+    fun(1.0)
 end
 # or
 @hyperopt for i=20, sampler=CLHSampler(dims=[Categorical(3), Continuous()]),
-                    fun   = [tanh, σ, relu],
+                    fun   = [tanh, sin, cos],
                     param = LinRange(0,1,20)
-    train_network(fun, param)
+    fun(param)
 end
 ```
 
 # Which sampler to use?
-`RandomSampler` is a good baseline and the default if none is chosen. `Hyperband(R=50, η=3, inner=RandomSampler())` runs the expression with varying amount of resources, allocating more resources to promising hyperparameters. See below for more info on `Hyperband`.
+`RandomSampler` is a good baseline and the default if none is chosen. `Hyperband(η=3, inner=RandomSampler())` runs the expression with varying amount of resources, allocating more resources to promising hyperparameters. See below for more info on `Hyperband`.
 
 If the number of iterations is small, `LHSampler` works better than random search. `LHSampler` evaluates an optimized [Latin hypercube](https://en.wikipedia.org/wiki/Latin_hypercube_sampling) plan, in which every candidate of each hyperparameter occurs exactly once. Caveat: `LHSampler` needs all candidate vectors to be of equal length, i.e.,
 ```julia
@@ -154,7 +138,7 @@ hob = @hyperopt for i=100, sampler = LHSampler(),
                             a = LinRange(1,5,100),
                             b = repeat([true, false],50),
                             c = exp10.(LinRange(-1,3,100))
-    f(a,b,c=c)
+    f(100,a,b,c=c)
 end
 ```
 where all candidate vectors are of length 100. The candidates for `b` thus had to be repeated 50 times.
@@ -166,7 +150,7 @@ hob = @hyperopt for i=100,
                     a = LinRange(1,5,100),
                     b = [true, false],
                     c = exp10.(LinRange(-1,3,100))
-    f(a,b,c=c)
+    f(100,a,b,c=c)
 end
 ```
 Here, each candidate of `b` occurs in 50 points of the plan, and the plan distributes the points with `b = true`, as well as those with `b = false`, over the ranges of `a` and `c`.
@@ -175,7 +159,7 @@ Both samplers accept the keyword arguments `rng`, the random number generator fr
 
 
 ## Hyperband
-`Hyperband(R=50, η=3, inner=RandomSampler())` implements [Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization](https://arxiv.org/abs/1603.06560). Hyperband evaluates configurations of the hyperparameters with a small budget, i.e., amount of resources, and evaluates the configurations with the smallest losses again with a larger budget. The maximum budget is `R`, and the parameter `η` determines the proportion of configurations that are discarded in each round of successive halving: the fraction `1/η` of the configurations is evaluated again with `η` times the budget. How to interpret the budget is entirely up to the user - it can be a time limit, the number of training epochs, the maximum number of iterations, or anything else.
+`Hyperband(η=3, inner=RandomSampler())` implements [Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization](https://arxiv.org/abs/1603.06560). Hyperband evaluates configurations of the hyperparameters with a small budget, i.e., amount of resources, and evaluates the configurations with the smallest losses again with a larger budget. The maximum budget is `R`, and the parameter `η` determines the proportion of configurations that are discarded in each round of successive halving: the fraction `1/η` of the configurations is evaluated again with `η` times the budget. How to interpret the budget is entirely up to the user - it can be a time limit, the number of training epochs, the maximum number of iterations, or anything else.
 
 With `Hyperband`, the first argument of the for loop names the variable that holds the budget of the current evaluation, and its value is the maximum budget `R`. The expression inside the `@hyperopt` macro takes the form of the following pseudocode
 ```julia
@@ -210,64 +194,17 @@ hohb.minimizer             # The initial guess [a, c] from which the smallest va
 hohb.sampler.minimum.state # The minimizer of f found from this initial guess
 plot(hohb)
 ```
-and a more complicated example that also explores different Optim optimizers as the inner optimizer is
-```julia
-hohb = @hyperopt for resources=50, sampler=Hyperband(η=3, inner=RandomSampler()),
-    algorithm = [SimulatedAnnealing(), ParticleSwarm(), NelderMead(), BFGS(), NewtonTrustRegion()],
-    a = LinRange(1,5,1800),
-    c = exp10.(LinRange(-1,3,1800))
-    x0 = state === nothing ? [a, c] : state
-    println(resources, " algorithm: ", typeof(algorithm).name.name)
-    res = Optim.optimize(x->f(x[1],c=x[2]), x0, algorithm, Optim.Options(time_limit=resources+1, show_trace=false))
-    Optim.minimum(res), Optim.minimizer(res)
-end
-printmin(hohb)
-```
 
 With `inner = LHSampler()` or `inner = CLHSampler(dims=[...])`, the configurations of all brackets of a run are distinct points of a Latin hypercube plan, which contains one point per element of the candidate vectors. The candidate vectors must therefore contain at least as many elements as a run of Hyperband draws configurations (`ho.iterations`); otherwise, an error that states the required number is thrown.
 
-### Function / vector interface
-Hyperband can also be called by itself with a more standard optimizer interface.
-In this case, the objective function takes a scalar budget and a vector, and returns the loss and a state.
-The vector contains the values of the hyperparameters in the first evaluation of a configuration, and the state
-returned by the previous evaluation of the same configuration otherwise. If the objective returns only the loss,
-the vector always contains the values of the hyperparameters.
-
-Example:
-```julia
-using Hyperopt
-using Optim: optimize, Options, minimum, minimizer
-f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
-
-objective = function (resources::Real, pars::AbstractVector)
-    res = optimize(x->f(x[1],c=x[2]), pars, SimulatedAnnealing(), Options(time_limit=resources/100))
-    minimum(res), minimizer(res)
-end
-
-candidates = (a=LinRange(1,5,300), c=exp10.(LinRange(-1,3,300))) # A vector of vectors also works, but parameters will not get nice names in plots
-hohb = hyperband(objective, candidates; R=50, η=3, threads=true)
-hohb.sampler.minimum.state # The minimizer of f found from the initial guess hohb.minimizer
-```
+The function `hyperband(f, candidates; R, η, inner)` runs Hyperband without the macro, and `hyperoptim` applies it to multi-start optimization with Optim.jl, see the [documentation](https://baggepinnen.github.io/Hyperopt.jl/stable/function_interface/).
 
 ## BOHB
-[BOHB: Robust and Efficient Hyperparameter Optimization at Scale](https://arxiv.org/abs/1807.01774) refines Hyperband by replacing the random sampler by a bayesian-optimization-based sampler. Now you can use it by simply replace the sampler in `Hyperband` as `BOHB(dims=[<dims>...])`
-
-### Examples
-
-Below in an example _without_ BOHB, which should be familiar from previous examples:
+[BOHB: Robust and Efficient Hyperparameter Optimization at Scale](https://arxiv.org/abs/1807.01774) refines Hyperband by replacing the random sampler by a sampler based on Bayesian optimization. It is used by replacing the inner sampler of `Hyperband` by `BOHB(dims=[<dims>...])`, where `dims` contains one dimension type per hyperparameter:
 ```julia
 using Optim
-hb = @hyperopt for resources=50, sampler=Hyperband(η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
-    x0 = state === nothing ? [a, c] : state
-    res = Optim.optimize(x->f(x[1],c=x[2]), x0, NelderMead(), Optim.Options(f_calls_limit=round(Int, resources)))
-    Optim.minimum(res), Optim.minimizer(res)
-end
-```
-
-To use BOHB, simply replace the inner sampler. Here we change from `RandomSampler` to `BOHB`.  
-Remember to specify dimension types for `BOHB`!
-```julia
-bohb = @hyperopt for resources=50, sampler=Hyperband(η=3, inner=BOHB(dims=[Hyperopt.Continuous(), Hyperopt.Continuous()])), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
+bohb = @hyperopt for resources=50, sampler=Hyperband(η=3, inner=BOHB(dims=[Continuous(), Continuous()])), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
     x0 = state === nothing ? [a, c] : state
     res = Optim.optimize(x->f(x[1],c=x[2]), x0, NelderMead(), Optim.Options(f_calls_limit=round(Int, resources)))
     Optim.minimum(res), Optim.minimizer(res)
