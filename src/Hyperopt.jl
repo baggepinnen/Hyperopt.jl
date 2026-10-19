@@ -33,12 +33,19 @@ Base.@kwdef mutable struct Hyperoptimizer{S<:Sampler, F, P, C}
 end
 
 function Base.getproperty(ho::Hyperoptimizer, s::Symbol)
-    s === :minimum && (return isempty(ho.results) ? NaN :  minimum(replace(ho.results, NaN => Inf)))
-    s === :minimizer && (return isempty(ho.results) ? [] :  ho.history[argmin(replace(ho.results, NaN => Inf))])
-    s === :maximum && (return isempty(ho.results) ? NaN :  maximum(replace(ho.results, NaN => -Inf)))
-    s === :maximizer && (return isempty(ho.results) ? [] :  ho.history[argmax(replace(ho.results, NaN => -Inf))])
+    if s === :minimum || s === :minimizer || s === :maximum || s === :maximizer
+        idx = compared_indices(ho)
+        isempty(idx) && return s === :minimum || s === :maximum ? NaN : []
+        sense_min = s === :minimum || s === :minimizer
+        results = replace(ho.results[idx], NaN => (sense_min ? Inf : -Inf))
+        k = sense_min ? argmin(results) : argmax(results)
+        return s === :minimum || s === :maximum ? results[k] : ho.history[idx[k]]
+    end
     return getfield(ho,s)
 end
+
+# Indices of the results that `ho.minimum`, `ho.minimizer`, `ho.maximum` and `ho.maximizer` compare
+compared_indices(ho::Hyperoptimizer) = eachindex(ho.results)
 
 function Base.show(io::IO, ho::Hyperoptimizer)
     println(io, "Hyperoptimizer with")
@@ -216,8 +223,7 @@ function create_ho(params, candidates, sampler, ho_, objective_)
         else
             s = ho.sampler
             if s isa Hyperband
-                ho.iterations = length(allcands[end])
-                s = s.inner
+                set_R!(s, allcands[1]) # The inner sampler is initialized by `hyperband`
             end
             s isa Union{LHSampler,CLHSampler} && init!(s, ho)
         end
@@ -337,6 +343,7 @@ end
     minimum(ho::Hyperoptimizer)
 
 Return the smallest result in `ho.results`, equivalent to `ho.minimum`. `NaN` results are treated as `Inf`. If `ho` contains no results, `NaN` is returned.
+With a [`Hyperband`](@ref) sampler, only the results obtained with the largest budget are compared.
 """
 Base.minimum(ho::Hyperoptimizer) = ho.minimum
 
@@ -344,6 +351,7 @@ Base.minimum(ho::Hyperoptimizer) = ho.minimum
     maximum(ho::Hyperoptimizer)
 
 Return the largest result in `ho.results`, equivalent to `ho.maximum`. `NaN` results are treated as `-Inf`. If `ho` contains no results, `NaN` is returned.
+With a [`Hyperband`](@ref) sampler, only the results obtained with the largest budget are compared.
 """
 Base.maximum(ho::Hyperoptimizer) = ho.maximum
 
@@ -402,7 +410,9 @@ include("plotting.jl")
 """
     hyperoptim(f, candidates, algorithm = Optim.NelderMead(), opts = Optim.Options(); R = 30, η = 3, inner = RandomSampler(), threads = true, verbose = false, Rmin = 0.1, kwargs...)
 
-Multi-start optimization with Optim and Hyperband. The interface is similar to that of `Optim.optimize`, but the initial guess is replaced by a vector of candidate vectors. The resources are used to set the allowed time for optimization by `Optim.optimize`.
+Multi-start optimization with Optim and Hyperband. The interface is similar to that of `Optim.optimize`, but the initial guess is replaced by a vector of candidate vectors. The resources are used to set the allowed time for optimization by `Optim.optimize`. An evaluation with a larger budget continues the optimization from the minimizer found by the previous evaluation of the same initial guess.
+
+Returns the `Hyperoptimizer` `ho`. `ho.minimum` is the smallest value of `f` found with the largest budget, `ho.minimizer` is the initial guess from which this value was found, and `ho.sampler.minimum.state` is the corresponding minimizer of `f`.
 
 This function requires Optim.jl to be loaded, i.e., `using Optim`.
 

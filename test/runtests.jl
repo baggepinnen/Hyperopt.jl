@@ -204,19 +204,21 @@ end
         candidates = [LinRange(1,5,300), exp10.(LinRange(-1,3,300))]
         hohb = Hyperopt.hyperband(fun, candidates; R=50)
         @test hohb.minimum < 100.1
-        @test hohb.minimizer ≈ [3, 100] rtol = 1e-2
+        # The minimizer is the initial guess, the state is the result of the optimization
+        @test hohb.minimizer in hohb.history
+        @test hohb.sampler.minimum.state ≈ [3, 100] rtol = 1e-2
 
         candidates = (a=LinRange(1,5,300), c=exp10.(LinRange(-1,3,300))) # NamedTuple should also work
         hohb = Hyperopt.hyperband(fun, candidates; R=50)
         @test hohb.minimum < 100.1
-        @test hohb.minimizer ≈ [3, 100] rtol = 1e-2
+        @test hohb.sampler.minimum.state ≈ [3, 100] rtol = 1e-2
         @test hohb.params == [:a, :c]
 
 
         g(a, c) = sum(@. 100 + (a-3)^2 + (c-100)^2)
         ho = hyperoptim(x->g(x...), candidates, Rmin=1, verbose=false, threads=false)
         @test ho.minimum < 100.1
-        @test ho.minimizer ≈ [3, 100] rtol = 1e-2
+        @test ho.sampler.minimum.state ≈ [3, 100] rtol = 1e-2
         @test ho.params == [:a, :c]
 
         # test that hyperband can be placed inside a function
@@ -297,6 +299,7 @@ end
         include("test_BOHB.jl")
     end
     include("test_single_parameter.jl")
+    include("test_hyperband.jl")
 
     @testset "Non-numerics" begin
         @info "Testing optimizing over non-numeric elements"
