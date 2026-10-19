@@ -112,14 +112,8 @@ end
         how = @hyperopt for i=10, a = LinRange(1,5,10), b = repeat([true, false],50)
             a
         end
-        f, io = mktemp()
-        redirect_stdout(io) do
-            warn_on_boundary(how)
-        end
-        close(io)
-        text = read(f, String)
-        @test  occursin("Parameter a obtained its optimum on an extremum of the sampled region", text)
-        @test !occursin("Parameter b", text)
+        boundary_params = @test_logs (:warn, r"Parameter a obtained its optimum on an extremum of the sampled region") warn_on_boundary(how)
+        @test boundary_params == [:a]
     end
 
     #     minimum.((hor,hob,hot,hof))
@@ -160,6 +154,8 @@ end
             f(a,b,c=c) + d(a)
         end
     end
+
+    include("test_small_defects.jl")
 
     @testset "Hyperband" begin
         @info "Testing Hyperband"

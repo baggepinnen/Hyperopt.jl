@@ -3,14 +3,14 @@
 
 Sample a value for each parameter uniformly at random from the candidate vectors. Log-uniform sampling available by providing a log-spaced candidate vector.
 
-Optionally, pass an `AbstractRNG` to initialize.
+Optionally, pass an `AbstractRNG` to initialize. By default, a `Xoshiro` generator is seeded with a random number drawn from the global RNG, so that `Random.seed!` makes the samples reproducible.
 """
 struct RandomSampler{T<:AbstractRNG} <: Sampler
     rng_channel::RemoteChannel{Channel{T}}
     lock::ReentrantLock
 end
 
-RandomSampler() = RandomSampler(MersenneTwister(rand(1:1000)))
+RandomSampler() = RandomSampler(Xoshiro(rand(UInt)))
 
 function RandomSampler(rng::T) where {T <: AbstractRNG}
     # We use a *single* RNG across threads and processors to ensure
