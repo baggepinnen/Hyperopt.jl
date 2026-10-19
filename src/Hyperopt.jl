@@ -12,8 +12,6 @@ using RecipesBase
 using Distributed
 using LatinHypercubeSampling
 using ThreadPools
-using Distributions: Normal, truncated
-using MultiKDE
 using Requires
 using Printf
 

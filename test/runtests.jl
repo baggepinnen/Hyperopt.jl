@@ -104,7 +104,7 @@ end
         end
 
         # @test_throws ArgumentError @hyperopt for i=100, sampler=CLHSampler(dims=[Hyperopt.ContinuousDim(),Hyperopt.CategoricalDim(2),Hyperopt.ContinuousDim()]), a = LinRange(1,5,99), b = [true, false], c = exp10.(LinRange(-1,3,100))
-        @test_throws ArgumentError @hyperopt for i=100, sampler=CLHSampler(dims=[Hyperopt.Continuous(),Hyperopt.CategoricalDim(2),Hyperopt.Continuous()]), a = LinRange(1,5,99), b = [true, false], c = exp10.(LinRange(-1,3,100))
+        @test_throws ArgumentError @hyperopt for i=100, sampler=CLHSampler(dims=[Hyperopt.Continuous(),Hyperopt.Categorical(2),Hyperopt.Continuous()]), a = LinRange(1,5,99), b = [true, false], c = exp10.(LinRange(-1,3,100))
             # println(i, "\t", a, "\t", b, "\t", c)
             f(a,b,c=c)
         end
