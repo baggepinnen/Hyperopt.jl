@@ -1,0 +1,39 @@
+name: Documentation
+on:
+  push:
+    branches:
+      - master
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+permissions:
+  # `actions: write` permits julia-actions/cache to delete outdated caches.
+  actions: write
+  # Documenter pushes the built documentation to the gh-pages branch.
+  contents: write
+  pages: write
+  # Documenter sets commit statuses.
+  statuses: write
+jobs:
+  docs:
+    name: Build and deploy the documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+      - name: Install the dependencies
+        run: julia --project=docs -e 'using Pkg; Pkg.develop(PackageSpec(path = pwd())); Pkg.instantiate()'
+      - name: Build and deploy
+        run: julia --project=docs docs/make.jl
+        env:
+          # Documenter deploys with the GITHUB_TOKEN of the workflow; no deploy key is required.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The GR backend of Plots renders without a display.
+          GKSwstype: '100'

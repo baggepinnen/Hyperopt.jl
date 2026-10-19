@@ -4,6 +4,8 @@
 Sample a value for each parameter uniformly at random from the candidate vectors. Log-uniform sampling available by providing a log-spaced candidate vector.
 
 Optionally, pass an `AbstractRNG` to initialize. By default, a `Xoshiro` generator is seeded with a random number drawn from the global RNG, so that `Random.seed!` makes the samples reproducible.
+
+`RandomSampler` is the default sampler of [`@hyperopt`](@ref) and the default inner sampler of [`Hyperband`](@ref). The values are drawn independently and with replacement, a configuration may therefore be drawn more than once. The candidate vectors may have different lengths and may contain values of any type, e.g., functions.
 """
 struct RandomSampler{T<:AbstractRNG} <: Sampler
     rng_channel::RemoteChannel{Channel{T}}
@@ -45,6 +47,15 @@ The plan is obtained from a random Latin hypercube by `steps` proposed exchanges
 The plan is drawn from `rng`. By default, a `Xoshiro` generator is seeded with a random number drawn from the global RNG, so that `Random.seed!` makes the plans reproducible.
 
 A new plan is generated for every run of `@hyperopt`, including a run that resumes an existing `Hyperoptimizer` with `ho = ...`, and for every iteration over a `Hyperoptimizer` that begins after results were recorded. The optimization of a new plan reduces the number of its points that coincide with configurations in `ho.history` with priority over the potential energy: an exchange that reduces this number is accepted, and an exchange that increases it is rejected. Configurations are thus not evaluated again if the number of steps suffices. With a single hyperparameter, however, every plan consists of all candidates.
+
+As the inner sampler of [`Hyperband`](@ref), the plan contains one point per element of the candidate vectors instead of one point per iteration, see [`Hyperband`](@ref).
+
+# Example
+```julia
+ho = @hyperopt for i = 100, sampler = LHSampler(), a = LinRange(1, 5, 100), b = repeat([true, false], 50)
+    (a - 3)^2 + b
+end
+```
 """
 mutable struct LHSampler{R<:AbstractRNG} <: Sampler
     rng::R
@@ -65,9 +76,16 @@ end
 
 Sample from an optimized Latin hypercube plan with continuous and categorical dimensions. `dims` contains one dimension type per hyperparameter, in the order of the candidate vectors, e.g., `dims = [Continuous(), Categorical(2), Continuous()]`:
 - `Continuous()`: the candidate vector must have the same length as the number of iterations, and every candidate occurs in exactly one point of the plan.
-- `Categorical(k)` or `UnorderedCategorical(k)`: a categorical hyperparameter with `k` candidates. In a plan with `n` points, every candidate occurs in `n ÷ k` or `n ÷ k + 1` points. Both types are treated as unordered: a categorical dimension contributes 1 to the squared distance between two points with different candidates and 0 otherwise. The optimized plan thus distributes the points that share a categorical candidate over the continuous dimensions.
+- `Categorical(k)` or `UnorderedCategorical(k)`: a categorical hyperparameter with `k` candidates, i.e., the candidate vector must have `k` elements. In a plan with `n` points, every candidate occurs in `n ÷ k` or `n ÷ k + 1` points. Both types are treated as unordered: a categorical dimension contributes 1 to the squared distance between two points with different candidates and 0 otherwise. The optimized plan thus distributes the points that share a categorical candidate over the continuous dimensions.
 
 The keyword arguments `rng` and `steps`, and the generation of new plans are described in [`LHSampler`](@ref).
+
+# Example
+```julia
+ho = @hyperopt for i = 100, sampler = CLHSampler(dims = [Continuous(), Categorical(2)]), a = LinRange(1, 5, 100), b = [true, false]
+    (a - 3)^2 + b
+end
+```
 """
 mutable struct CLHSampler{R<:AbstractRNG} <: Sampler
     dims::Vector{DimensionType}
@@ -267,6 +285,10 @@ largest budget. `ho.sampler.minimum` is `nothing` before the first evaluation, a
 `(; loss, budget, state, configuration)` of the evaluation that `ho.minimum` refers to. `plot(ho)` shows the results
 of each budget as a separate series. `ho.iterations` is the number of configurations that one run of Hyperband draws
 from `inner`. A `Hyperband` sampler records the evaluations of one `Hyperoptimizer` and cannot be used for several.
+
+A run that continues an existing `Hyperoptimizer` with `ho = ...` runs all brackets again and continues the sampler of
+the existing `Hyperoptimizer`, including `R`, `η`, the recorded budgets and `minimum`. The value of the first loop
+argument of the continued run is not used.
 
 With `inner = LHSampler()` or `CLHSampler(...)`, the configurations of all brackets of a run are distinct points of a
 Latin hypercube plan, which contains one point per element of the candidate vectors. The candidate vectors must
@@ -622,7 +644,9 @@ A fraction `ρ` of the configurations is sampled at random. The remaining config
 maximizing the ratio l(x)/g(x) of two kernel density estimates, fitted to the best and the worst configurations
 evaluated with the largest budget for which sufficiently many observations are available. The observations are the
 evaluated configurations, i.e., the values of the hyperparameters, and their losses; the states returned by the
-objective are not used.
+objective are not used. The observations are recorded by Hyperband; a `BOHB` sampler that is not the inner sampler of
+a `Hyperband` sampler therefore draws only random configurations. A run that continues an existing `Hyperoptimizer`
+with `ho = ...` continues the sampler, including its observations.
 
 `dims` contains one dimension type per hyperparameter, in the order of the candidate vectors:
 - `Continuous()`: an ordered, real-valued hyperparameter. The densities are estimated in the coordinate given by the
@@ -642,6 +666,13 @@ The remaining keyword arguments refer to the symbols in the paper:
 - `min_bandwidth`: Lower bound of the bandwidths. This parameter does not occur in the paper but is used in the reference implementation HpBandSter.
 - `random_sampler`: `RandomSampler` used for the random configurations. Its RNG is used for all random decisions of
   BOHB, a run is thus reproducible with, e.g., `random_sampler = RandomSampler(MersenneTwister(0))`.
+
+# Example
+```julia
+ho = @hyperopt for resources = 27, sampler = Hyperband(η = 3, inner = BOHB(dims = [Continuous(), Categorical(2)])), a = LinRange(1, 5, 100), b = [true, false]
+    (a - 3)^2 + b + 1/resources
+end
+```
 """
 mutable struct BOHB <: Sampler
     dims::Vector{DimensionType}
