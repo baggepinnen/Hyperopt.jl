@@ -31,7 +31,7 @@ Requires = "1"
 Setfield = "0.7, 0.8, 1.0"
 Statistics = "1"
 ThreadPools = "1, 2"
-julia = "1.6"
+julia = "1.10"
 
 [extras]
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
