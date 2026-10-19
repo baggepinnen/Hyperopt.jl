@@ -140,11 +140,10 @@ compared_indices(ho::Hyperoptimizer) = eachindex(ho.results)
 function Base.show(io::IO, ho::Hyperoptimizer)
     println(io, "Hyperoptimizer with")
     candstring = map(zip(ho.params, ho.candidates)) do (param, cand)
-        s = "  "*string(param)*" length: "
         if length(cand) <= 3
-            s*string(cand)
+            "  $(param) candidates: [$(join(repr.(cand), ", "))]"
         else
-            s*string(length(cand))
+            "  $(param) length: $(length(cand))"
         end
     end
     candstring = join(candstring, "\n")
@@ -156,7 +155,7 @@ function Base.show(io::IO, ho::Hyperoptimizer)
     end
     println(io)
     for (i, v) in enumerate(ho.minimizer)
-        if v isa Number
+        if v isa AbstractFloat
             @printf(io, "%9.4g ", v)
         else
             @printf(io, "%9s ", v)
@@ -170,6 +169,7 @@ Base.propertynames(ho::Hyperoptimizer) = (:minimum, :minimizer, :maximum, :maxim
 include("samplers.jl")
 
 function Hyperoptimizer(iterations::Int, sampler::Sampler = RandomSampler(); kwargs...)
+    check_sampler(sampler)
     params = keys(kwargs)
     candidates = []
     for kw in kwargs
@@ -319,28 +319,47 @@ end
 sampler_kind(s) = string(nameof(typeof(s)))
 sampler_kind(s::Hyperband) = "Hyperband with the inner sampler $(sampler_kind(s.inner))"
 
+# BOHB proposes configurations from the observations that Hyperband records, it is therefore only valid as an inner sampler
+check_sampler(::Sampler) = nothing
+check_sampler(::BOHB) = throw(ArgumentError("BOHB is an inner sampler of Hyperband, e.g., `sampler = Hyperband(η = 3, inner = BOHB(dims = [...]))`. Without Hyperband, no observations are recorded, and BOHB would draw only random configurations."))
+
+function check_iterations(n)
+    n isa Integer || throw(ArgumentError("The value of the first loop argument of `@hyperopt` is the number of iterations and must be an integer, got $(repr(n))"))
+    n
+end
+
+# A continued Hyperband run uses the maximum budget of the existing sampler
+function check_resumed_R(hb::Hyperband, value)
+    value == hb.R || @warn "The value $(repr(value)) of the first loop argument differs from the maximum budget R = $(repr(hb.R)) of the continued Hyperband sampler and is not used"
+    hb
+end
+
 function create_ho(params, candidates, sampler, ho_, objective_)
     quote
         objective = $(objective_)
-        allcands = $(Expr(:tuple, esc.(candidates)...)) # The first element is the number of iterations
+        allcands = $(Expr(:tuple, esc.(candidates)...)) # The first element is the number of iterations, or the maximum budget of Hyperband
         sampler = $(esc(sampler))
         existing_ho = $(esc(ho_))
-        if existing_ho isa Hyperoptimizer
+        resumed = existing_ho isa Hyperoptimizer
+        if resumed
             sampler = resumed_sampler(existing_ho.sampler, sampler)
         elseif sampler === nothing
             sampler = RandomSampler()
         end
-        ho = Hyperoptimizer(; iterations = allcands[1], params = $(esc(params))[2:end], candidates = allcands[2:end], sampler, objective)
-        if existing_ho isa Hyperoptimizer # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
+        check_sampler(sampler)
+        if sampler isa Hyperband # The inner sampler is initialized by `hyperband`
+            resumed ? check_resumed_R(sampler, allcands[1]) : set_R!(sampler, allcands[1])
+            iterations = nconfigurations(sampler)
+        else
+            iterations = check_iterations(allcands[1])
+        end
+        ho = Hyperoptimizer(; iterations, params = $(esc(params))[2:end], candidates = allcands[2:end], sampler, objective)
+        if resumed # get info from existing ho. the objective function might be changed, due to variables are captured into the closure, so the type of ho also changed.
             ho.history = existing_ho.history # it's important to use the same array, not copy.
             ho.results = existing_ho.results
             init!(ho.sampler, ho)
         else
-            s = ho.sampler
-            if s isa Hyperband
-                set_R!(s, allcands[1]) # The inner sampler is initialized by `hyperband`
-            end
-            s isa Union{LHSampler,CLHSampler} && init!(s, ho)
+            ho.sampler isa Union{LHSampler,CLHSampler} && init!(ho.sampler, ho)
         end
         ho
     end
@@ -358,16 +377,18 @@ Evaluate the loop body for configurations of the hyperparameters `name1, name2, 
 
 The arguments of the for loop are:
 - `i = n`: The first argument. Without [`Hyperband`](@ref), `n` is the number of iterations, i.e., the number of
-  configurations that are drawn and evaluated, and `i` holds the index of the current iteration. With a `Hyperband`
-  sampler, `n` is the maximum budget `R`, and `i` holds the budget of the current evaluation. Any variable name can be
-  used instead of `i`.
+  configurations that are drawn and evaluated, an integer, and `i` holds the index of the current iteration. With a
+  `Hyperband` sampler, `n` is the maximum budget `R`, a real number of at least 1, and `i` holds the budget of the
+  current evaluation. Any variable name can be used instead of `i`.
 - `sampler = s` (optional): The sampler that draws the configurations: [`RandomSampler`](@ref) (the default),
-  [`LHSampler`](@ref), [`CLHSampler`](@ref) or [`Hyperband`](@ref).
+  [`LHSampler`](@ref), [`CLHSampler`](@ref) or [`Hyperband`](@ref). [`BOHB`](@ref) is only valid as the inner sampler
+  of `Hyperband`.
 - `ho = existing_ho` (optional): A `Hyperoptimizer` whose optimization is continued. The configurations and results of
   the new run are appended to `existing_ho.history` and `existing_ho.results`, which the returned `Hyperoptimizer`
   shares with `existing_ho`. The sampler of `existing_ho` is continued, including the state of its random number
   generator and, for [`BOHB`](@ref), its observations. A sampler given with `sampler = s` is not used, and a warning is
-  emitted if it is of another type than the sampler of `existing_ho`.
+  emitted if it is of another type than the sampler of `existing_ho`. With a `Hyperband` sampler, the value `n` is not
+  used, and a warning is emitted if it differs from the maximum budget `R` of the existing sampler.
 - `name = candidates`: One argument per hyperparameter. `candidates` is a vector of the values that the hyperparameter
   can take, e.g., `LinRange(1, 5, 100)`, `exp10.(LinRange(-3, 1, 100))` for logarithmically spaced values,
   `[true, false]` or `[tanh, sin]`. In the loop body, the variable `name` holds the value of the hyperparameter.

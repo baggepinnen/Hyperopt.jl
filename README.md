@@ -71,12 +71,12 @@ end
 50	3.754754754754755	true	0.12945299782279157   	f(x, a, b, c = c) = 10084.695813253911
 Hyperoptimizer with
   a length: 1000
-  b length: Bool[1, 0]
+  b candidates: [true, false]
   c length: 1000
   minimum / maximum: (128.7764050750981, 570037.3595670203)
   minimizer:
         a         b         c
-     3.25         0     97.05
+     3.25     false     97.05
 
 
 julia> best_params, min_f = ho.minimizer, ho.minimum

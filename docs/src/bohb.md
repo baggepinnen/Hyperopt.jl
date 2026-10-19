@@ -6,7 +6,7 @@ Hyperopt.SHOW_PROGRESS[] = false
 Random.seed!(0)
 ```
 
-[`BOHB`](@ref) implements the model-based sampling of [BOHB: Robust and Efficient Hyperparameter Optimization at Scale](https://arxiv.org/abs/1807.01774). It is used as the inner sampler of [`Hyperband`](@ref) and replaces the random sampling of the configurations: a fraction `ρ` of the configurations is drawn at random, and the remaining configurations are proposed by maximizing the ratio ``l(x)/g(x)`` of two kernel density estimates, fitted to the best and to the worst configurations evaluated with the largest budget for which sufficiently many observations are available. Before sufficiently many observations are available, all configurations are drawn at random.
+[`BOHB`](@ref) implements the model-based sampling of [BOHB: Robust and Efficient Hyperparameter Optimization at Scale](https://arxiv.org/abs/1807.01774). It is only valid as the inner sampler of [`Hyperband`](@ref), which records its observations, and replaces the random sampling of the configurations: a fraction `ρ` of the configurations is drawn at random, and the remaining configurations are proposed by maximizing the ratio ``l(x)/g(x)`` of two kernel density estimates, fitted to the best and to the worst configurations evaluated with the largest budget for which sufficiently many observations are available. Before sufficiently many observations are available, all configurations are drawn at random.
 
 ## Dimension types
 

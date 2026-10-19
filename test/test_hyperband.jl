@@ -260,4 +260,44 @@ end
         @test ho.minimizer in ho.history
         @test ho.sampler.minimum.budget == 9
     end
+
+    @testset "Maximum budget" begin
+        # A non-integer maximum budget given as the first loop argument
+        ho = @hyperopt for r = 4.5, sampler = Hyperband(η = 3), a = LinRange(1, 5, 100), b = LinRange(1, 5, 100)
+            (a - 3)^2 + b + 1/r
+        end
+        @test ho.sampler.R == 4.5
+        @test maximum(ho.sampler.budgets) == 4.5
+        @test minimum(ho.sampler.budgets) == 1.5
+        @test length(ho.results) == length(ho.sampler.budgets) > 0
+        @test_throws ArgumentError @hyperopt for r = 0.5, sampler = Hyperband(η = 3), a = LinRange(1, 5, 100)
+            (a - 3)^2
+        end
+        @test_throws ArgumentError hyperband((r, pars) -> sum(pars), [LinRange(1, 5, 100)]; R = 0.5)
+        # Successive halving requires R ≥ η
+        ho = @test_logs (:warn, r"single configuration") @hyperopt for r = 2, sampler = Hyperband(η = 3), a = LinRange(1, 5, 100)
+            (a - 3)^2
+        end
+        @test length(ho.results) == 1
+        # Without Hyperband, the first loop argument is the number of iterations
+        @test_throws ArgumentError @hyperopt for i = 4.5, a = LinRange(1, 5, 100)
+            (a - 3)^2
+        end
+    end
+
+    @testset "First loop argument of a continued run" begin
+        ho = @hyperopt for r = 9, sampler = Hyperband(η = 3), a = LinRange(1, 5, 100)
+            (a - 3)^2 + 1/r
+        end
+        n = length(ho.results)
+        @test_logs @hyperopt for r = 9, ho = ho, a = LinRange(1, 5, 100)
+            (a - 3)^2 + 1/r
+        end
+        @test length(ho.results) == 2n
+        @test_logs (:warn, r"differs from the maximum budget R = 9") @hyperopt for r = 27, ho = ho, a = LinRange(1, 5, 100)
+            (a - 3)^2 + 1/r
+        end
+        @test length(ho.results) == 3n
+        @test ho.sampler.R == 9
+    end
 end
