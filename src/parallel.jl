@@ -72,8 +72,8 @@ Base.iterate(s::Stoppable, state...) = s.stopped[] ? nothing : iterate(s.itr, st
 
 Return `mapfun(f, s)`, where `s` is an iterator over the elements of `itr` of unknown length. `mapfun` is called in a
 separate task. If the calling task is interrupted while it waits for this task, the iteration of `s` ends, so that
-`mapfun` starts no further evaluations, and the `InterruptException` is rethrown without waiting for the evaluations
-that have started. An error thrown by `mapfun` is rethrown.
+`mapfun` receives no further elements, and the `InterruptException` is rethrown without waiting for the evaluations of
+the elements that `mapfun` has received. An error thrown by `mapfun` is rethrown.
 """
 function stoppable_map(mapfun, f, itr)
     stopped = Threads.Atomic{Bool}(false)
@@ -151,40 +151,53 @@ function record_results!(ho, configurations, results)
 end
 
 """
-    @phyperopt for i = iterations, [sampler = ..., ho = ...,] a = candidates_a, b = candidates_b, ...
-        body
+    ho = @phyperopt for i = n, [sampler = RandomSampler(),] [ho = existing_ho,] name1 = candidates1, ...
+        loop body
     end [pmap]
 
-Same as `@hyperopt`, but the evaluations of the loop body are distributed over the worker processes with
+Same as [`@hyperopt`](@ref), but the evaluations of the loop body are distributed over the worker processes with
 `Distributed.pmap`. The functions that the loop body calls must be defined on all workers, e.g., with `@everywhere`.
 
 All configurations are drawn from the sampler on the calling process before the evaluations start. For every
 evaluation, a worker receives the function that evaluates the loop body, the iteration index and the configuration, and
 returns only the result. The amount of data transferred per evaluation is thus independent of the number of evaluations.
 The evaluations are recorded in `ho.history` and `ho.results` in the order of the iterations, with the same types as by
-`@hyperopt`; with a seeded sampler, e.g., `RandomSampler(Xoshiro(0))`, `@phyperopt` records the same configurations as
-`@hyperopt`.
+`@hyperopt`. With a seeded sampler, e.g., `RandomSampler(Xoshiro(0))`, `@phyperopt` therefore records the same
+configurations as `@hyperopt`.
 
 The optional second argument is a function with the interface of `pmap`, which is called as `pmap(f, itr)`, where `itr`
 is an iterator of unknown length. It can, e.g., pass keyword arguments to `pmap`, as in
 `(f, itr) -> pmap(f, itr; on_error = e -> nothing)`, or use a `CachingPool`, as in
-`(f, itr) -> pmap(f, CachingPool(workers()), itr)`, which sends `f` to each worker only once. The latter is useful if
-the loop body refers to large local variables, e.g., if `@phyperopt` is called inside a function.
+`(f, itr) -> pmap(f, CachingPool(workers()), itr)`, which sends `f` to each worker only once. The latter reduces the
+transferred data if the loop body refers to large local variables, e.g., if `@phyperopt` is called inside a function.
 
 Errors and interruptions:
 - If the loop body throws an error, no further evaluations are started, and the error is rethrown as a `RemoteException`
   when the evaluations that have started have completed. Other tasks on the workers are not interrupted. The results
-  obtained so far are recorded in the `Hyperoptimizer`, which remains accessible if it was given with `ho = ...`.
+  obtained so far are recorded in the [`Hyperoptimizer`](@ref), which remains accessible if it was given with
+  `ho = existing_ho`.
 - If `pmap` handles errors, e.g., with the keyword argument `on_error`, the failed evaluations are not recorded, and the
   values that `on_error` returns are ignored.
-- If the calling task is interrupted, e.g., by Ctrl-C, no further evaluations are started, and the `Hyperoptimizer` with
-  the results obtained so far is returned. The evaluations that are running are not interrupted; they complete in the
-  background, and their results are discarded. `Distributed.interrupt()` interrupts them, together with any other task
-  that runs on the workers.
+- If the calling task is interrupted, e.g., by Ctrl-C, `pmap` receives no further configurations, and the
+  `Hyperoptimizer` with the results obtained so far is returned. The evaluations of the configurations that `pmap` has
+  received, which include the running evaluations and at most one configuration that `pmap` has not yet sent to a
+  worker, are not interrupted; they complete in the background, and their results are discarded.
+  `Distributed.interrupt()` interrupts the running evaluations, together with any other task that runs on the workers.
 
-With a `Hyperband` sampler, the configurations of each rung of successive halving are evaluated in parallel, see
-`hyperband`. The value that `on_error` returns for a failed evaluation is then used as its result, e.g.,
-`on_error = e -> Inf`, since successive halving requires a loss for every configuration of a rung.
+With a [`Hyperband`](@ref) sampler, the configurations of each rung of successive halving are evaluated in parallel by
+`pmap`, see [`hyperband`](@ref). The value that `on_error` returns for a failed evaluation is then used as its result,
+e.g., `on_error = e -> Inf`, since successive halving requires a loss for every configuration of a rung.
+
+# Example
+```julia
+using Distributed
+addprocs(4)
+@everywhere using Hyperopt
+@everywhere cost(a, b) = (a - 3)^2 + (b ? 10 : 20)
+ho = @phyperopt for i = 100, a = LinRange(1, 5, 1000), b = [true, false]
+    cost(a, b)
+end
+```
 """
 macro phyperopt(ex, pmap = pmap)
     pre = preprocess_expression(ex)
@@ -198,18 +211,18 @@ end
 local_scope(ex) = Expr(:let, Expr(:block), ex)
 
 """
-    @thyperopt for i = iterations, [sampler = ..., ho = ...,] a = candidates_a, b = candidates_b, ...
-        body
+    ho = @thyperopt for i = n, [sampler = RandomSampler(),] [ho = existing_ho,] name1 = candidates1, ...
+        loop body
     end
 
-Same as `@hyperopt`, but the loop body is evaluated in `Threads.nthreads()` tasks spawned with `Threads.@spawn`, see
-`Hyperopt.tmap`. The loop body must therefore be safe to evaluate concurrently, and the memory consumption increases
-with the number of concurrent evaluations.
+Same as [`@hyperopt`](@ref), but the loop body is evaluated in `Threads.nthreads()` tasks spawned with
+`Threads.@spawn`, see [`Hyperopt.tmap`](@ref). The loop body must therefore be safe to evaluate concurrently, and the
+memory consumption increases with the number of concurrent evaluations.
 
-The configurations are drawn and the evaluations are recorded as described for `@phyperopt`. Errors and interruptions
-are also handled as described for `@phyperopt`, except that an error in the loop body is rethrown as a
-`TaskFailedException`. With a `Hyperband` sampler, the configurations of each rung of successive halving are evaluated
-in parallel.
+The configurations are drawn and the evaluations are recorded as described for [`@phyperopt`](@ref). Errors and
+interruptions are also handled as described for `@phyperopt`, except that an error in the loop body is rethrown as a
+`TaskFailedException`. With a [`Hyperband`](@ref) sampler, the configurations of each rung of successive halving are
+evaluated in parallel.
 """
 macro thyperopt(ex)
     pre = preprocess_expression(ex)

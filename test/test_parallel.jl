@@ -187,9 +187,29 @@ end
     end
 
     @testset "Errors do not interrupt other work" begin
-        # A task on a worker that is unrelated to the optimization completes when `gate` is ready
-        gate = RemoteChannel(() -> Channel{Bool}(1))
-        unrelated = remotecall(g -> take!(g), first(workers()), gate)
+        # A computation on the worker w1 that is unrelated to the optimizations, which use only the worker w2 or threads.
+        # The computation creates the file `started` and runs until the file `stop` exists. The allocations are
+        # safepoints at which an interrupt of w1 would be delivered.
+        w1, w2 = workers()[1:2]
+        started, stop = tempname(), tempname()
+        unrelated = remotecall(w1, started, stop) do started, stop
+            touch(started)
+            t0 = time()
+            while !isfile(stop) && time() - t0 < 120
+                rand(10)
+            end
+            isfile(stop) ? :completed : :timeout
+        end
+        timedwait(() -> isfile(started), 60)
+        @test_throws RemoteException @phyperopt for i = 10, a = 1:10
+            error("failure")
+        end (f, itr) -> pmap(f, WorkerPool([w2]), itr)
+        @test_throws TaskFailedException @thyperopt for i = 10, a = 1:10
+            error("failure")
+        end
+        touch(stop)
+        @test fetch(unrelated) === :completed
+        rm(started); rm(stop)
 
         ho = @phyperopt for i = 10, a = 1:10
             a
@@ -217,10 +237,7 @@ end
         end (f, itr) -> pmap(f, itr; on_error = e -> nothing)
         @test length(ho.results) == 10
         @test ho.results == first.(ho.history)
-
-        @test !istaskdone(unrelated)
-        put!(gate, true)
-        @test fetch(unrelated) === true
+        @test nworkers() >= 2
     end
 
     @testset "Interruption" begin
@@ -238,11 +255,12 @@ end
         @test length(ho.results) < 50
         @test ho.results == first.(ho.history)
 
-        # An interruption of the calling task stops the optimization without waiting for the running evaluations, and
-        # no further evaluations are started
+        # An interruption of the calling task stops the optimization before all evaluations have completed, and no
+        # further evaluations start. `pmap` may have received one configuration that it has not yet sent to a worker.
         @everywhere parallel_test_started = Ref(0)
         @everywhere parallel_test_count!() = (parallel_test_started[] += 1; nothing)
-        N = 200
+        duration = 10 # Duration of a complete run in seconds
+        N = round(Int, duration * nworkers() / 0.05)
         running = interrupt_after(1)
         t = @elapsed ho = @phyperopt for i = N, a = 1:N
             parallel_test_count!()
@@ -252,14 +270,15 @@ end
         running[] = false
         @test length(ho.results) < N
         @test ho.results == first.(ho.history)
-        @test t < N * 0.05 / nworkers() / 2
+        @test t < duration / 2
         sleep(0.5) # The running evaluations complete
         started = sum(w -> remotecall_fetch(() -> parallel_test_started[], w), workers())
         sleep(0.5)
         @test sum(w -> remotecall_fetch(() -> parallel_test_started[], w), workers()) == started
-        @test started <= length(ho.results) + nworkers()
+        @test started <= length(ho.results) + nworkers() + 1
 
         started = Threads.Atomic{Int}(0)
+        N = round(Int, duration * Threads.nthreads() / 0.05)
         running = interrupt_after(1)
         t = @elapsed ho = @thyperopt for i = N, a = 1:N
             Threads.atomic_add!(started, 1)
@@ -269,7 +288,7 @@ end
         running[] = false
         @test length(ho.results) < N
         @test ho.results == first.(ho.history)
-        @test t < N * 0.05 / Threads.nthreads() / 2
+        @test t < duration / 2
         sleep(0.5)
         @test started[] <= length(ho.results) + Threads.nthreads()
     end
@@ -331,7 +350,7 @@ end
             bytes_per_evaluation(10) # Compilation
             b100, b1000 = bytes_per_evaluation(100), bytes_per_evaluation(1000)
             @info "Data transferred by the workers per evaluation" b100 b1000
-            @test b1000 < 1.5 * b100
+            @test 100 < b1000 < 1.5 * b100
             @test b1000 < 5000
         end
     end
