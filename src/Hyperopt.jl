@@ -155,9 +155,16 @@ function loop_body(ex)
 end
 
 
+"""
+    Hyperopt.SHOW_PROGRESS[] = false
+
+Disable the progress meters that `@hyperopt`, `hyperband` and `hyperoptim` display. The progress meters are enabled by default.
+"""
+const SHOW_PROGRESS = Ref(true)
+
 function optimize(ho::Hyperoptimizer)
     try
-        @showprogress "Hyperoptimizing" for nt = ho
+        @showprogress desc="Hyperoptimizing" enabled=SHOW_PROGRESS[] for nt = ho
             res = ho.objective(nt...)
             push!(ho.results, res)
         end

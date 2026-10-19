@@ -97,6 +97,12 @@ plot(ho)
 
 This may allow us to determine which parameters are most important for the performance etc.
 
+## Progress meters
+`@hyperopt`, `hyperband` and `hyperoptim` display a progress meter. The progress meters are disabled by
+```julia
+Hyperopt.SHOW_PROGRESS[] = false
+```
+
 
 The type `Hyperoptimizer` is iterable, it iterates for the specified number of iterations, each iteration providing a sample of the parameter vector, e.g.
 ```julia
