@@ -271,6 +271,11 @@ the weights of a model and the state of its optimizer. If the loop body returns 
 every evaluation. If `R` is also given to the sampler and differs from the value of the first loop argument, the value
 of the sampler is used and a deprecation warning is emitted.
 
+The budgets of the evaluations are `R/η^k` for `k = 0, 1, ...` and are not smaller than 1; `R` is therefore a real
+number of at least 1, e.g., `R = 4.5` for a time limit of 4.5 seconds with a smallest budget of 1 second. Successive
+halving requires `R ≥ η`; with `R < η`, a run evaluates a single configuration with the budget `R`, and a warning is
+emitted.
+
 The evaluations are recorded in `ho.history` (the configurations), `ho.results` (the losses) and `ho.sampler.budgets`
 (the budgets). `ho.minimum`, `ho.minimizer`, `ho.maximum` and `ho.maximizer` compare only the results obtained with the
 largest budget. `ho.sampler.minimum` is `nothing` before the first evaluation, and otherwise the named tuple
@@ -280,7 +285,7 @@ from `inner`. A `Hyperband` sampler records the evaluations of one `Hyperoptimiz
 
 A run that continues an existing `Hyperoptimizer` with `ho = ...` runs all brackets again and continues the sampler of
 the existing `Hyperoptimizer`, including `R`, `η`, the recorded budgets and `minimum`. The value of the first loop
-argument of the continued run is not used.
+argument of the continued run is not used, and a warning is emitted if it differs from `R`.
 
 With `inner = LHSampler()` or `CLHSampler(...)`, the configurations of all brackets of a run are distinct points of a
 Latin hypercube plan, which contains one point per element of the candidate vectors. The candidate vectors must
@@ -314,6 +319,7 @@ end
 # brackets. The budgets are computed from `R`, so that rungs of different brackets with the same budget have equal budgets.
 function brackets(R, η)
     η > 1 || throw(ArgumentError("Hyperband: η must be greater than 1, got η = $η"))
+    R isa Real && R >= 1 || throw(ArgumentError("Hyperband: the maximum budget R must be a real number of at least 1, since the budgets R/η^k of the evaluations are not smaller than 1; got R = $(repr(R)). Express the budget in units in which the smallest budget is at least 1."))
     if log(η,R) ≈ ceil(log(η, R))       # Catch machine precision error for e.g.
         smax = ceil(Int, log(η, R))     # η=3 and R ∈ (3 .^ [5, 10, 13, 15, 17, 20, 23, 26, 27]), or
     else                                # η=9 and R ∈ (9 .^ [5, 10, 13, 15, 17])
@@ -353,6 +359,7 @@ function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false, mapfun=threads 
     hb.R === nothing && throw(ArgumentError("Hyperband: the maximum budget R is not specified"))
     length(hb.budgets) == length(ho.results) || throw(ArgumentError("The Hyperband sampler has recorded the budgets of $(length(hb.budgets)) evaluations, but the Hyperoptimizer contains $(length(ho.results)) results. A Hyperband sampler records the evaluations of one Hyperoptimizer and cannot be used for several; construct a new sampler for each optimization, or continue an optimization with `ho = ...`."))
     bs = brackets(hb.R, hb.η)
+    hb.R < hb.η && @warn "Hyperband with R = $(hb.R) < η = $(hb.η) evaluates a single configuration with the budget R, since successive halving requires R ≥ η"
     ho.iterations = sum(first, bs)
     init_inner!(hb, ho)
     hb.nsampled = 0
@@ -634,9 +641,9 @@ A fraction `ρ` of the configurations is sampled at random. The remaining config
 maximizing the ratio l(x)/g(x) of two kernel density estimates, fitted to the best and the worst configurations
 evaluated with the largest budget for which sufficiently many observations are available. The observations are the
 evaluated configurations, i.e., the values of the hyperparameters, and their losses; the states returned by the
-objective are not used. The observations are recorded by Hyperband; a `BOHB` sampler that is not the inner sampler of
-a `Hyperband` sampler therefore draws only random configurations. A run that continues an existing `Hyperoptimizer`
-with `ho = ...` continues the sampler, including its observations.
+objective are not used. The observations are recorded by Hyperband; `BOHB` is therefore only valid as the inner
+sampler of a `Hyperband` sampler, and `@hyperopt` throws an `ArgumentError` for `sampler = BOHB(...)`. A run that
+continues an existing `Hyperoptimizer` with `ho = ...` continues the sampler, including its observations.
 
 `dims` contains one dimension type per hyperparameter, in the order of the candidate vectors:
 - `Continuous()`: an ordered, real-valued hyperparameter. The densities are estimated in the coordinate given by the

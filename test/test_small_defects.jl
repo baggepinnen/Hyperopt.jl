@@ -9,7 +9,13 @@ using Hyperopt, Plots
         str = sprint(show, ho)
         @test endswith(str, "\n")
         @test occursin("  a length: 10", str)
-        @test occursin("  g length: ", str)
+        @test occursin("  g candidates: [sin, cos]", str)
+        ho = Hyperoptimizer(iterations=2, params=(:a, :b, :n), candidates=(LinRange(1, 5, 10), [true, false], 1:100),
+            history=Any[Any[1.0, true, 12345], Any[5.0, false, 2]], results=Any[1.0, 2.0])
+        str = sprint(show, ho)
+        @test occursin("  b candidates: [true, false]", str)
+        @test occursin(r"\s1\s+true\s+12345", str) # Bool and Integer values are printed as such
+        @test !occursin("Bool[", str)
         path, io = mktemp()
         redirect_stdout(io) do
             show(IOBuffer(), ho)

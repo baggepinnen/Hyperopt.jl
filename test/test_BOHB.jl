@@ -167,4 +167,14 @@ struct UnsupportedDimension <: Hyperopt.DimensionType end
         @test count(best_bohb .< best_random) > count(best_bohb .> best_random)
         @test mean(proposal_bohb) < 0.5mean(proposal_random)
     end
+
+    @testset "BOHB is only valid as the inner sampler of Hyperband" begin
+        @test_throws ArgumentError @hyperopt for i = 10, sampler = BOHB(dims = [Continuous()]), a = LinRange(1, 5, 100)
+            (a - 3)^2
+        end
+        @test_throws ArgumentError @thyperopt for i = 10, sampler = BOHB(dims = [Continuous()]), a = LinRange(1, 5, 100)
+            (a - 3)^2
+        end
+        @test_throws ArgumentError Hyperoptimizer(10, BOHB(dims = [Continuous()]); a = LinRange(1, 5, 100))
+    end
 end

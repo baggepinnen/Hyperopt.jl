@@ -106,6 +106,8 @@ ho_lhs.iterations, length(unique(ho_lhs.history))
 
 ## The maximum budget
 
-The maximum budget is the value of the first loop argument. It can also be given to the sampler, `Hyperband(R = 81, η = 3)`, in which case the value of the first loop argument is to be equal to `R`. If the two values differ, `R` of the sampler is used and a deprecation warning is emitted. In versions before v0.6, the value of the first loop argument was ignored.
+The maximum budget is the value of the first loop argument. It can also be given to the sampler, `Hyperband(R = 81, η = 3)`, in which case the value of the first loop argument is to be equal to `R`. If the two values differ, `R` of the sampler is used and a deprecation warning is emitted. In versions before v0.6, the value of the first loop argument was ignored. When an optimization is continued with `ho = ...`, the maximum budget of the existing sampler is used, and a warning is emitted if the value of the first loop argument differs from it.
+
+The budgets of the evaluations are ``R/η^k`` for ``k = 0, 1, …`` and are not smaller than 1. `R` is therefore a real number of at least 1, e.g., `R = 4.5` for a time limit of 4.5 seconds with a smallest budget of 1 second. Successive halving requires ``R ≥ η``; with ``R < η``, a run evaluates a single configuration with the budget `R`, and a warning is emitted.
 
 See [Function interface](function_interface.md) for [`hyperband`](@ref), which runs Hyperband without the macro.
