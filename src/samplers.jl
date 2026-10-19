@@ -266,7 +266,10 @@ end
 function fit_kde(data::Matrix{Float64}, levels::Vector{Int}, min_bandwidth::Real)
     d, n = size(data)
     bandwidth = map(1:d) do j
-        h = max(1.06 * std(view(data, j, :), corrected=false) * n^(-1 / (4 + d)), min_bandwidth)
+        x = view(data, j, :)
+        x̄ = sum(x) / n
+        σ = sqrt(sum(xi -> (xi - x̄)^2, x) / n)
+        h = max(1.06 * σ * n^(-1 / (4 + d)), min_bandwidth)
         levels[j] == 0 ? h : min(h, (levels[j] - 1) / levels[j])
     end
     ProductKDE(data, bandwidth, levels)
