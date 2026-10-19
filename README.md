@@ -266,7 +266,11 @@ end
 
 When using BOHB, a Kernel Density Estimator will estimate hyperparameters that balance exploration and exploitation based on previous observations. The estimated hyperparameters are evaluated as a new configuration, i.e., they are assigned to the hyperparameter variables (`a` and `c` in the previous example) and `state === nothing`. The observations are the states returned by the loop body. As a consequence, the `state` returned (`Optim.minimizer(res)` in the previous example) needs to be a tuple holding the values for each hyperparameter in order (`(a, c)` in the previous example).
 
-Note - BOHB currently only handles `Continuous` variables, see [issue #80](https://github.com/baggepinnen/Hyperopt.jl/issues/80) for a discussion on adding support for categorical variables.
+The keyword argument `dims` contains one dimension type per hyperparameter, in the order of the candidate vectors:
+- `Continuous()` for ordered, real-valued hyperparameters, including integer-valued ones. The densities are estimated in the coordinate given by the index into the sorted candidate vector, scaled to [0, 1]. A log-spaced candidate vector such as `exp10.(LinRange(-1,3,1800))` is thus modeled in a logarithmic coordinate.
+- `Categorical(n)` or `UnorderedCategorical(n)` for categorical hyperparameters with `n` candidates, e.g., `UnorderedCategorical(3)` for `fun = [tanh, σ, relu]`. Both types are treated as unordered.
+
+Every configuration proposed by BOHB consists of elements of the candidate vectors. All random decisions of BOHB use the RNG of its random sampler, a run is thus reproducible with, e.g., `BOHB(dims=[Continuous(), Continuous()], random_sampler=RandomSampler(MersenneTwister(0)))`. See the docstring of `BOHB` for the remaining parameters.
 
 # Parallel execution
 - The macro `@phyperopt` works in the same way as `@hyperopt` but distributes all computation on available workers. The usual caveats apply, code must be loaded on all workers etc.
