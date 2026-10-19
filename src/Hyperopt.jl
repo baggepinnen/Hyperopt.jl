@@ -3,11 +3,9 @@ module Hyperopt
 export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax, warn_on_boundary
 export RandomSampler, LHSampler, CLHSampler, hyperband, Hyperband, hyperoptim, BOHB, Continuous, Categorical, UnorderedCategorical
 
-using Base.Threads: threadid, nthreads
-using LinearAlgebra, Statistics, Random
+using Random
 using ProgressMeter
 using MacroTools
-using MacroTools: postwalk, prewalk
 using RecipesBase
 using Distributed
 using LatinHypercubeSampling
