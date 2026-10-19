@@ -153,40 +153,38 @@ end
     @testset "Latin hypercube plan" begin
         candidates = (a = LinRange(1, 5, 100), c = exp10.(LinRange(-1, 1, 100)))
         objective(r, pars) = sum(abs2, pars .- [3, 1])
+        # The configurations are distinct points of a plan, in which every candidate occurs in one point
+        distinct_points(configurations) = all(j -> allunique(getindex.(configurations, j)), 1:2)
         ho = hyperband(objective, candidates; R = 27, inner = LHSampler())
-        s = ho.sampler.inner
-        plan = [[candidates.a[s.samples[1, k]], candidates.c[s.samples[2, k]]] for k in 1:size(s.samples, 2)]
-        # Each configuration is a distinct point of the plan
-        @test ho.sampler.nsampled == 49
+        @test ho.sampler.nsampled == ho.iterations == 49
         @test length(ho.history) == 69
-        @test length(unique(ho.history)) == 49
-        @test Set(ho.history) == Set(plan[1:49])
+        configurations = unique(ho.history)
+        @test length(configurations) == 49
+        @test distinct_points(configurations)
 
         ho = @hyperopt for r = 27, sampler = Hyperband(η = 3, inner = LHSampler()), a = candidates.a, c = candidates.c
             sum(abs2, [a, c] .- [3, 1]), [a, c]
         end
-        @test length(unique(ho.history)) == 49
-        # A continued optimization draws the subsequent points of the plan
+        configurations = unique(ho.history)
+        @test length(configurations) == 49
+        @test distinct_points(configurations)
         @hyperopt for r = 27, ho = ho, sampler = Hyperband(η = 3, inner = LHSampler()), a = candidates.a, c = candidates.c
             sum(abs2, [a, c] .- [3, 1]), [a, c]
         end
         @test length(ho.history) == 138
-        @test length(unique(ho.history)) == 98
+        configurations = unique(ho.history[70:end])
+        @test length(configurations) == 49
+        @test distinct_points(configurations)
+
+        # The plan must contain a point for each configuration
         msg = try
-            @hyperopt for r = 27, ho = ho, sampler = Hyperband(η = 3, inner = LHSampler()), a = candidates.a, c = candidates.c
-                sum(abs2, [a, c] .- [3, 1]), [a, c]
+            @hyperopt for r = 27, sampler = Hyperband(η = 3, inner = LHSampler()), a = LinRange(1, 5, 20), c = LinRange(1, 5, 20)
+                (a - 3)^2 + (c - 3)^2
             end
         catch e
             sprint(showerror, e)
         end
-        @test occursin("contains 100 points", msg)
-        @test occursin("in addition to the 98 configurations drawn before", msg)
-        @test length(ho.history) == 138
-
-        # The plan must contain a point for each configuration
-        @test_throws ArgumentError @hyperopt for r = 27, sampler = Hyperband(η = 3, inner = LHSampler()), a = LinRange(1, 5, 20), c = LinRange(1, 5, 20)
-            (a - 3)^2 + (c - 3)^2
-        end
+        @test occursin("20 points, but Hyperband with R = 27 and η = 3 draws 49 configurations", msg)
         @test_throws ArgumentError hyperband(objective, [LinRange(1, 5, 48), LinRange(1, 5, 48)]; R = 27, inner = LHSampler())
 
         # The size of the plan does not depend on the length of a categorical candidate vector

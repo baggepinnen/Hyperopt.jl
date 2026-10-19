@@ -114,9 +114,9 @@ largest budget. `ho.sampler.minimum` is `nothing` before the first evaluation, a
 of each budget as a separate series. `ho.iterations` is the number of configurations that one run of Hyperband draws
 from `inner`. A `Hyperband` sampler records the evaluations of one `Hyperoptimizer` and cannot be used for several.
 
-With `inner = LHSampler()` or `CLHSampler(...)`, the configurations of all brackets, and of continued runs with
-`ho = ...`, are distinct points of one Latin hypercube plan. The plan contains one point per element of the candidate
-vectors, which must therefore contain at least as many elements as configurations are drawn.
+With `inner = LHSampler()` or `CLHSampler(...)`, the configurations of all brackets of a run are distinct points of a
+Latin hypercube plan, which contains one point per element of the candidate vectors. The candidate vectors must
+therefore contain at least `ho.iterations` elements.
 
 See also [`hyperband`](@ref) for an interface without the macro.
 """
@@ -126,7 +126,8 @@ Base.@kwdef mutable struct Hyperband <: Sampler
     inner::Sampler = RandomSampler()
     budgets::Vector{Float64} = Float64[]
     minimum::Union{Nothing, NamedTuple} = nothing
-    # Number of configurations drawn from `inner`, the next configuration is drawn with the index `nsampled + 1`
+    # Number of configurations drawn from `inner` in the current run, the next configuration is drawn with the index
+    # `nsampled + 1`
     nsampled::Int = 0
 end
 Hyperband(R) = Hyperband(R=R)
@@ -189,6 +190,7 @@ function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false, mapfun=threads 
     bs = brackets(hb.R, hb.η)
     ho.iterations = sum(first, bs)
     init_inner!(hb, ho)
+    hb.nsampled = 0
     p = Progress(length(bs); dt=1, desc="Hyperband", enabled=SHOW_PROGRESS[])
     for (k, (n, budgets)) in enumerate(bs)
         successive_halving(ho, n, budgets; mapfun)
@@ -204,25 +206,25 @@ function progress_values(hb::Hyperband, k, nbrackets)
     values
 end
 
-# Initializes the Latin hypercube plan of the inner sampler, and checks that the plan contains a point that has not been
-# drawn before for each configuration of the run
+# Prepares the Latin hypercube plan of the inner sampler for a run, whose `ho.iterations` configurations are drawn with
+# distinct indices into the plan. The plan contains one point per element of the candidate vectors.
 function init_inner!(hb::Hyperband, ho)
     s = hb.inner
     s isa Union{LHSampler,CLHSampler} || return
     nconfigs = ho.iterations
-    ho.iterations = lhs_plan_size(s, ho) # `init!` creates a plan with `ho.iterations` points
+    N = lhs_plan_size(s, ho)
+    nconfigs <= N || throw(ArgumentError("The Latin hypercube plan of the inner sampler contains one point per element of the candidate vectors (of the Continuous dimensions for CLHSampler), $N points, but Hyperband with R = $(hb.R) and η = $(hb.η) draws $nconfigs configurations. Provide candidate vectors with at least $nconfigs elements, or use another inner sampler."))
+    ho.iterations = N # `init!` creates a plan with `ho.iterations` points
     try
         init!(s, ho)
     finally
         ho.iterations = nconfigs
     end
-    N = size(s.samples, 2)
-    hb.nsampled + nconfigs <= N || throw(ArgumentError("The Latin hypercube plan of the inner sampler contains $N points, but Hyperband with R = $(hb.R) and η = $(hb.η) draws $nconfigs configurations$(hb.nsampled > 0 ? " in addition to the $(hb.nsampled) configurations drawn before" : ""). The plan contains one point per element of the candidate vectors (of the Continuous dimensions for CLHSampler); provide candidate vectors with at least $(hb.nsampled + nconfigs) elements, or use another inner sampler."))
 end
 
 lhs_plan_size(::LHSampler, ho) = maximum(length, ho.candidates)
 function lhs_plan_size(s::CLHSampler, ho)
-    lengths = [length(c) for (d, c) in zip(s.dims, ho.candidates) if !(d isa Categorical)]
+    lengths = [length(c) for (d, c) in zip(s.dims, ho.candidates) if d isa Continuous]
     isempty(lengths) ? ho.iterations : maximum(lengths)
 end
 

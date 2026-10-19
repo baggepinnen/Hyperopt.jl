@@ -220,7 +220,7 @@ end
 printmin(hohb)
 ```
 
-With `inner = LHSampler()` or `inner = CLHSampler(dims=[...])`, the configurations of all brackets, and of an optimization that is continued with `ho = ...`, are distinct points of one Latin hypercube plan. The plan contains one point per element of the candidate vectors, which must therefore contain at least as many elements as configurations are drawn (`ho.iterations` per run of Hyperband); otherwise, an error that states the required number is thrown.
+With `inner = LHSampler()` or `inner = CLHSampler(dims=[...])`, the configurations of all brackets of a run are distinct points of a Latin hypercube plan, which contains one point per element of the candidate vectors. The candidate vectors must therefore contain at least as many elements as a run of Hyperband draws configurations (`ho.iterations`); otherwise, an error that states the required number is thrown.
 
 ### Function / vector interface
 Hyperband can also be called by itself with a more standard optimizer interface.
