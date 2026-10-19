@@ -5,7 +5,6 @@ version = "0.5.6"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
-LatinHypercubeSampling = "a5e1c1ea-c99a-51d3-a14d-a9a37257b02d"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
@@ -22,7 +21,6 @@ HyperoptOptimExt = "Optim"
 [compat]
 Aqua = "0.8"
 Distributed = "1"
-LatinHypercubeSampling = "1.2"
 MacroTools = "0.5"
 Optim = "1, 2"
 Plots = "1"

@@ -84,6 +84,7 @@ end
         @test length(hocl.results) == 200
 
     end
+    include("test_lhs.jl")
 
     @testset "Error handling" begin
         @info "Testing Error handling"
