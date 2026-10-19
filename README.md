@@ -28,7 +28,7 @@ end
 
 ## Details
 
-1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below).
+1. The macro `@hyperopt` takes a for-loop with an initial argument determining the number of samples to draw (`i` below). With `Hyperband`, the initial argument holds the budget of each evaluation instead, see [Hyperband](#hyperband).
 2. The sample strategy can be specified by specifying the special keyword `sampler = Sampler(opts...)`. Available options are `RandomSampler()`, `LHSampler()`, `CLHSampler(dims=[Continuous(), Categorical(2), Continuous(), ...])`, `Hyperband(R=50, η=3, inner=RandomSampler())`.
 3. The subsequent arguments to the for-loop specifies names and candidate values for different hyper parameters (`a = LinRange(1,2,1000), b = [true, false], c = exp10.(LinRange(-1,3,1000))` below).
 4. A useful strategy to achieve log-uniform sampling is logarithmically spaced vector, e.g. `c = exp10.(LinRange(-1,3,1000))`.
@@ -43,7 +43,7 @@ using Hyperopt
 
 f(x,a,b=true;c=10) = sum(@. x + (a-3)^2 + (b ? 10 : 20) + (c-100)^2) # Function to minimize
 
-# Main macro. The first argument to the for loop is always interpreted as the number of iterations (except for hyperband optimizer)
+# Main macro. The first argument to the for loop is interpreted as the number of iterations (for Hyperband, as the maximum budget)
 ho = @hyperopt for i=50,
             sampler = RandomSampler(), # This is default if none provided
             a = LinRange(1,5,1000),
@@ -171,54 +171,63 @@ end
 
 
 ## Hyperband
-`Hyperband(R=50, η=3, inner=RandomSampler())` Implements [Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization](https://arxiv.org/abs/1603.06560). The maximum amount of resources is given by `R` and the parameter `η` roughly determines the proportion of trials discarded between each round of successive halving. When using `Hyperband` the expression inside the `@hyperopt` macro takes the form of the following pseudocode
+`Hyperband(R=50, η=3, inner=RandomSampler())` implements [Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization](https://arxiv.org/abs/1603.06560). Hyperband evaluates configurations of the hyperparameters with a small budget, i.e., amount of resources, and evaluates the configurations with the smallest losses again with a larger budget. The maximum budget is `R`, and the parameter `η` determines the proportion of configurations that are discarded in each round of successive halving: the fraction `1/η` of the configurations is evaluated again with `η` times the budget. How to interpret the budget is entirely up to the user - it can be a time limit, the number of training epochs, the maximum number of iterations, or anything else.
+
+With `Hyperband`, the first argument of the for loop names the variable that holds the budget of the current evaluation, and its value is the maximum budget `R`. The expression inside the `@hyperopt` macro takes the form of the following pseudocode
 ```julia
-ho = @hyperopt for resources=50, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
-    if state === nothing # Query if state is initialized
-        res = optimize(resources, a, b) # if state is uninitialized, start a new optimization using the selected hyper parameters
-    else
-        res = optimize(resources, state=state) # If state has a value, continue the optimization from the state
+ho = @hyperopt for resources = 50, sampler = Hyperband(η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
+    if state === nothing # The first evaluation of the configuration (a, c)
+        model = create_model(a, c)
+    else                 # The configuration (a, c) is evaluated again with a larger budget
+        model = state    # Continue from the state returned by the previous evaluation
     end
-    minimum(res), get_state(res) # return the minimum value and a state from which to continue the optimization
+    train!(model, resources)
+    loss(model), model   # Return the loss and a state from which the training can be continued
 end
 ```
-the resources are increased by defining a variable `resources` inside each loop, which grows according to the hyperband algorithm. 
-How to interpret `resources` is entirely up to the user - it can be a time limit, the maximum number of iterations, or anything else.
+- In every evaluation, the hyperparameter variables (`a` and `c` above) hold the configuration that is evaluated, and `resources` holds its budget.
+- `state` is `nothing` in the first evaluation of a configuration. When a configuration is evaluated again with a larger budget, `state` is the state returned by its previous evaluation. The state can be any object, e.g., the weights of a neural network together with the state of its optimizer. Hyperopt does not interpret the state.
+- The loop body returns `(loss, state)`. If it returns only the loss, `state` is `nothing` in every evaluation, i.e., every evaluation starts from the beginning.
 
-A (simple) working example using `Hyperband` and Optim is given below, where the resources are used to control the maximum calls to the objective function:
+The resulting `Hyperoptimizer` records the configuration, the loss and the budget of each evaluation in `ho.history`, `ho.results` and `ho.sampler.budgets`, respectively. Since losses obtained with different budgets are not comparable, `ho.minimum`, `ho.minimizer`, `ho.maximum`, `ho.maximizer` and `printmin(ho)` consider only the evaluations with the largest budget. `ho.sampler.minimum` is the named tuple `(; loss, budget, state, configuration)` of the evaluation that attains `ho.minimum`; in the example above, `ho.sampler.minimum.state` is the trained model of the best configuration. `plot(ho)` shows the results of each budget as a separate series.
+
+If `R` is also given to `Hyperband` and differs from the value of the first loop argument, `R` of the sampler is used and a deprecation warning is emitted. In versions before v0.6, the value of the first loop argument was ignored.
+
+A (simple) working example using `Hyperband` and Optim is given below, where the budget is the maximum number of calls to the objective function, and the state is the minimizer found so far:
 ```julia
 using Optim
 f(a;c=10) = sum(@. 100 + (a-3)^2 + (c-100)^2)
-hohb = @hyperopt for resources=50, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
-    if !(state === nothing)
-        a,c = state
-    end
-    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], SimulatedAnnealing(), Optim.Options(f_calls_limit=round(Int, resources)))
+hohb = @hyperopt for resources=50, sampler=Hyperband(η=3, inner=RandomSampler()), a = LinRange(1,5,1800), c = exp10.(LinRange(-1,3,1800))
+    x0 = state === nothing ? [a, c] : state
+    res = Optim.optimize(x->f(x[1],c=x[2]), x0, SimulatedAnnealing(), Optim.Options(f_calls_limit=round(Int, resources)))
     Optim.minimum(res), Optim.minimizer(res)
 end
+hohb.minimizer             # The initial guess [a, c] from which the smallest value with the largest budget was found
+hohb.sampler.minimum.state # The minimizer of f found from this initial guess
 plot(hohb)
 ```
 and a more complicated example that also explores different Optim optimizers as the inner optimizer is
 ```julia
-hohb = @hyperopt for resources=50, sampler=Hyperband(R=50, η=3, inner=RandomSampler()),
+hohb = @hyperopt for resources=50, sampler=Hyperband(η=3, inner=RandomSampler()),
     algorithm = [SimulatedAnnealing(), ParticleSwarm(), NelderMead(), BFGS(), NewtonTrustRegion()],
     a = LinRange(1,5,1800),
     c = exp10.(LinRange(-1,3,1800))
-    if state !== nothing
-        algorithm, x0 = state
-    else
-        x0 = [a,c]
-    end
+    x0 = state === nothing ? [a, c] : state
     println(resources, " algorithm: ", typeof(algorithm).name.name)
     res = Optim.optimize(x->f(x[1],c=x[2]), x0, algorithm, Optim.Options(time_limit=resources+1, show_trace=false))
-    Optim.minimum(res), (algorithm, Optim.minimizer(res))
+    Optim.minimum(res), Optim.minimizer(res)
 end
+printmin(hohb)
 ```
+
+With `inner = LHSampler()` or `inner = CLHSampler(dims=[...])`, the configurations of all brackets, and of an optimization that is continued with `ho = ...`, are distinct points of one Latin hypercube plan. The plan contains one point per element of the candidate vectors, which must therefore contain at least as many elements as configurations are drawn (`ho.iterations` per run of Hyperband); otherwise, an error that states the required number is thrown.
 
 ### Function / vector interface
 Hyperband can also be called by itself with a more standard optimizer interface.
-In this case, the objective function takes a scalar `resources` and a vector of 
-parameters, and returns the objective value and a vector of parameters.
+In this case, the objective function takes a scalar budget and a vector, and returns the loss and a state.
+The vector contains the values of the hyperparameters in the first evaluation of a configuration, and the state
+returned by the previous evaluation of the same configuration otherwise. If the objective returns only the loss,
+the vector always contains the values of the hyperparameters.
 
 Example:
 ```julia
@@ -233,6 +242,7 @@ end
 
 candidates = (a=LinRange(1,5,300), c=exp10.(LinRange(-1,3,300))) # A vector of vectors also works, but parameters will not get nice names in plots
 hohb = hyperband(objective, candidates; R=50, η=3, threads=true)
+hohb.sampler.minimum.state # The minimizer of f found from the initial guess hohb.minimizer
 ```
 
 ## BOHB
@@ -243,11 +253,9 @@ hohb = hyperband(objective, candidates; R=50, η=3, threads=true)
 Below in an example _without_ BOHB, which should be familiar from previous examples:
 ```julia
 using Optim
-hb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
-    if state !== nothing
-        a,c = state
-    end
-    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=round(Int, i)))
+hb = @hyperopt for resources=50, sampler=Hyperband(η=3, inner=RandomSampler()), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+    x0 = state === nothing ? [a, c] : state
+    res = Optim.optimize(x->f(x[1],c=x[2]), x0, NelderMead(), Optim.Options(f_calls_limit=round(Int, resources)))
     Optim.minimum(res), Optim.minimizer(res)
 end
 ```
@@ -255,16 +263,14 @@ end
 To use BOHB, simply replace the inner sampler. Here we change from `RandomSampler` to `BOHB`.  
 Remember to specify dimension types for `BOHB`!
 ```julia
-bohb = @hyperopt for i=18, sampler=Hyperband(R=50, η=3, inner=BOHB(dims=[Hyperopt.Continuous(), Hyperopt.Continuous()])), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
-    if state !== nothing
-        a,c = state
-    end
-    res = Optim.optimize(x->f(x[1],c=x[2]), [a,c], NelderMead(), Optim.Options(f_calls_limit=round(Int, i)))
+bohb = @hyperopt for resources=50, sampler=Hyperband(η=3, inner=BOHB(dims=[Hyperopt.Continuous(), Hyperopt.Continuous()])), a = LinRange(1,5,800), c = exp10.(LinRange(-1,3,1800))
+    x0 = state === nothing ? [a, c] : state
+    res = Optim.optimize(x->f(x[1],c=x[2]), x0, NelderMead(), Optim.Options(f_calls_limit=round(Int, resources)))
     Optim.minimum(res), Optim.minimizer(res)
 end
 ```
 
-When using BOHB, a Kernel Density Estimator will estimate hyperparameters that balance exploration and exploitation based on previous observations. The estimated hyperparameters are evaluated as a new configuration, i.e., they are assigned to the hyperparameter variables (`a` and `c` in the previous example) and `state === nothing`. The observations are the states returned by the loop body. As a consequence, the `state` returned (`Optim.minimizer(res)` in the previous example) needs to be a tuple holding the values for each hyperparameter in order (`(a, c)` in the previous example).
+When using BOHB, a Kernel Density Estimator will estimate hyperparameters that balance exploration and exploitation based on previous observations. The estimated hyperparameters are evaluated as a new configuration, i.e., they are assigned to the hyperparameter variables (`a` and `c` in the previous example) and `state === nothing`. The observations are the evaluated configurations, i.e., the values of the hyperparameters, and their losses. The state returned by the loop body is not used by BOHB and can be any object.
 
 The keyword argument `dims` contains one dimension type per hyperparameter, in the order of the candidate vectors:
 - `Continuous()` for ordered, real-valued hyperparameters, including integer-valued ones. The densities are estimated in the coordinate given by the index into the sorted candidate vector, scaled to [0, 1]. A log-spaced candidate vector such as `exp10.(LinRange(-1,3,1800))` is thus modeled in a logarithmic coordinate.
