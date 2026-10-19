@@ -117,14 +117,15 @@ end
 10  1.4081632653061225  true    1.112896676939024
 ```
 
-If used in this way, the hyperoptimizer **can not** keep track of the function values like it did when `@hyperopt` was used. To manually store the same data, consider a pattern like
+Each iteration appends the sample to `ho.history`. If used in this way, the hyperoptimizer **can not** keep track of the function values like it did when `@hyperopt` was used. To manually store the same data, append each result to `ho.results`:
 ```julia
-ho = Hyperoptimizer(10, a = LinRange(1,2), b = [true, false], c = randn(100))
+ho = Hyperoptimizer(10, a = LinRange(1,2,50), b = [true, false], c = randn(100))
 for (i,a,b,c) in ho
     res = computations(a,b,c)
-    push!(ho.history, [a,b,c])
+    push!(ho.results, res)
 end
 ```
+When an iteration over `ho` starts, the samples at the end of `ho.history` without a corresponding entry in `ho.results` are removed, so iterating over `ho` several times does not accumulate samples that were never evaluated.
 
 # Categorical variables
 `RandomSampler` and `CLHSampler` support categorical variables which do not have a natural floating point representation, such as functions:
