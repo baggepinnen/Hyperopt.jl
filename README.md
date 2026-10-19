@@ -3,8 +3,8 @@
 ## Maintanence mode
 ⚠️ This package has outgrown its original design and has in the process become hard to maintain and extend. This package is therefore in maintainence mode, and is unlikely to accept suggestions for significant continued development. Smaller bug-fix PRs are still welcome.
 
-[![Build Status](https://github.com/baggepinnen/Hyperopt.jl/workflows/CI/badge.svg)](https://github.com/baggepinnen/Hyperopt.jl/actions)
-[![codecov.io](http://codecov.io/github/baggepinnen/Hyperopt.jl/coverage.svg?branch=master)](http://codecov.io/github/baggepinnen/Hyperopt.jl?branch=master)
+[![CI](https://github.com/baggepinnen/Hyperopt.jl/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/baggepinnen/Hyperopt.jl/actions/workflows/ci.yml?query=branch%3Amaster)
+[![codecov](https://codecov.io/gh/baggepinnen/Hyperopt.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/baggepinnen/Hyperopt.jl)
 
 
 A package to perform hyperparameter optimization. Currently supports random search, [latin hypercube sampling](https://en.wikipedia.org/wiki/Latin_hypercube_sampling) and [Bayesian optimization](https://arxiv.org/abs/1807.02811).
@@ -97,6 +97,12 @@ plot(ho)
 
 This may allow us to determine which parameters are most important for the performance etc.
 
+## Progress meters
+`@hyperopt`, `hyperband` and `hyperoptim` display a progress meter. The progress meters are disabled by
+```julia
+Hyperopt.SHOW_PROGRESS[] = false
+```
+
 
 The type `Hyperoptimizer` is iterable, it iterates for the specified number of iterations, each iteration providing a sample of the parameter vector, e.g.
 ```julia
@@ -117,14 +123,15 @@ end
 10  1.4081632653061225  true    1.112896676939024
 ```
 
-If used in this way, the hyperoptimizer **can not** keep track of the function values like it did when `@hyperopt` was used. To manually store the same data, consider a pattern like
+Each iteration appends the sample to `ho.history`. If used in this way, the hyperoptimizer **can not** keep track of the function values like it did when `@hyperopt` was used. To manually store the same data, append each result to `ho.results`:
 ```julia
-ho = Hyperoptimizer(10, a = LinRange(1,2), b = [true, false], c = randn(100))
+ho = Hyperoptimizer(10, a = LinRange(1,2,50), b = [true, false], c = randn(100))
 for (i,a,b,c) in ho
     res = computations(a,b,c)
-    push!(ho.history, [a,b,c])
+    push!(ho.results, res)
 end
 ```
+When an iteration over `ho` starts, the samples at the end of `ho.history` without a corresponding entry in `ho.results` are removed, so iterating over `ho` several times does not accumulate samples that were never evaluated.
 
 # Categorical variables
 `RandomSampler` and `CLHSampler` support categorical variables which do not have a natural floating point representation, such as functions:

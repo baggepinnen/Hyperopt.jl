@@ -3,16 +3,13 @@ module Hyperopt
 export Hyperoptimizer, @hyperopt, @phyperopt, @thyperopt, printmin, printmax, warn_on_boundary
 export RandomSampler, LHSampler, CLHSampler, hyperband, Hyperband, hyperoptim, BOHB, Continuous, Categorical, UnorderedCategorical
 
-using Base.Threads: threadid, nthreads
-using LinearAlgebra, Statistics, Random
+using Random
 using ProgressMeter
 using MacroTools
-using MacroTools: postwalk, prewalk
 using RecipesBase
 using Distributed
 using LatinHypercubeSampling
 using ThreadPools
-using Requires
 using Printf
 
 const DimensionType = LHCDimension
@@ -25,10 +22,10 @@ struct UnorderedCategorical <: DimensionType
 end
 
 abstract type Sampler end
-Base.@kwdef mutable struct Hyperoptimizer{S<:Sampler, F}
+Base.@kwdef mutable struct Hyperoptimizer{S<:Sampler, F, P, C}
     iterations::Int
-    params
-    candidates
+    params::P
+    candidates::C
     history = []
     results = []
     sampler::S = RandomSampler()
@@ -45,13 +42,12 @@ end
 
 function Base.show(io::IO, ho::Hyperoptimizer)
     println(io, "Hyperoptimizer with")
-    cands = ho.candidates
-    candstring = map(keys(cands)) do k
-        s = "  "*string(k)*" length: "
-        if length(cands[k]) <= 3
-            s*string(cands[k])
+    candstring = map(zip(ho.params, ho.candidates)) do (param, cand)
+        s = "  "*string(param)*" length: "
+        if length(cand) <= 3
+            s*string(cand)
         else
-            s*string(length(cands[k]))
+            s*string(length(cand))
         end
     end
     candstring = join(candstring, "\n")
@@ -69,7 +65,7 @@ function Base.show(io::IO, ho::Hyperoptimizer)
             @printf(io, "%9s ", v)
         end
     end
-    println()
+    println(io)
 end
 
 Base.propertynames(ho::Hyperoptimizer) = (:minimum, :minimizer, :maximum, :maximizer, fieldnames(Hyperoptimizer)...)
@@ -86,14 +82,41 @@ function Hyperoptimizer(iterations::Int, sampler::Sampler = RandomSampler(); kwa
 end
 
 Base.length(ho::Hyperoptimizer) = ho.iterations
+Base.eltype(::Type{<:Hyperoptimizer}) = NamedTuple
+# The field types of the yielded `NamedTuple` depend on the sampled values, `collect` therefore determines the element type from the elements.
+Base.IteratorEltype(::Type{<:Hyperoptimizer}) = Base.EltypeUnknown()
 
+"""
+    iterate(ho::Hyperoptimizer, state = 1; update_history = true)
 
+Draw the sample of iteration `state` from the sampler of `ho` and return it as a `NamedTuple` with the iteration index `i` and one entry per parameter, e.g., `(i = 1, a = 0.3, b = true)`.
+
+If `update_history = true`, the sample is appended to `ho.history`; the corresponding result is to be appended to `ho.results` by the caller:
+```julia
+for (i, a, b) in ho
+    push!(ho.results, f(a, b))
+end
+```
+`ho.history[k]` and `ho.results[k]` then refer to the same evaluation. Entries at the end of `ho.history` without a corresponding entry in `ho.results`, e.g., the samples of an earlier iteration whose results were not recorded, are removed when the iteration starts (`state = 1`). Iterating over `ho` again after the results of all samples were recorded appends `ho.iterations` new samples, which corresponds to continuing the optimization.
+"""
 function Base.iterate(ho::Hyperoptimizer, state=1; update_history=true)
     state > ho.iterations && return nothing
+    update_history && state == 1 && discard_unevaluated!(ho)
     samples = ho.sampler(ho, state)
     update_history && push!(ho.history, samples)
     nt = (; Pair.((:i, ho.params...), (state, samples...))...)
     nt, state+1
+end
+
+"""
+    discard_unevaluated!(ho::Hyperoptimizer)
+
+Remove the entries at the end of `ho.history` for which `ho.results` contains no corresponding result.
+"""
+function discard_unevaluated!(ho::Hyperoptimizer)
+    n = length(ho.results)
+    length(ho.history) > n && resize!(ho.history, n)
+    ho
 end
 
 """
@@ -156,13 +179,21 @@ function loop_body(ex)
 end
 
 
+"""
+    Hyperopt.SHOW_PROGRESS[] = false
+
+Disable the progress meters that `@hyperopt`, `hyperband` and `hyperoptim` display. The progress meters are enabled by default.
+"""
+const SHOW_PROGRESS = Ref(true)
+
 function optimize(ho::Hyperoptimizer)
     try
-        @showprogress "Hyperoptimizing" for nt = ho
+        @showprogress desc="Hyperoptimizing" enabled=SHOW_PROGRESS[] for nt = ho
             res = ho.objective(nt...)
             push!(ho.results, res)
         end
     catch e
+        discard_unevaluated!(ho)
         if e isa InterruptException
             @info "Aborting hyperoptimization"
         else
@@ -302,14 +333,19 @@ macro thyperopt(ex)
     pmacrobody(ex, pre[1], ho_, ThreadPools.tmap)
 end
 
-function Base.minimum(ho::Hyperoptimizer)
-    m,i = findmin(replace(ho.results, NaN => Inf))
-    m
-end
-function Base.maximum(ho::Hyperoptimizer)
-    m,i = findmax(replace(ho.results, NaN => -Inf))
-    m
-end
+"""
+    minimum(ho::Hyperoptimizer)
+
+Return the smallest result in `ho.results`, equivalent to `ho.minimum`. `NaN` results are treated as `Inf`. If `ho` contains no results, `NaN` is returned.
+"""
+Base.minimum(ho::Hyperoptimizer) = ho.minimum
+
+"""
+    maximum(ho::Hyperoptimizer)
+
+Return the largest result in `ho.results`, equivalent to `ho.maximum`. `NaN` results are treated as `-Inf`. If `ho` contains no results, `NaN` is returned.
+"""
+Base.maximum(ho::Hyperoptimizer) = ho.maximum
 
 """
     printmin([io=stdout,] ho)
@@ -338,36 +374,51 @@ end
 """
     warn_on_boundary(ho, sense = :min)
 
-Prints a warning message for each parameter where the optimum was obtained on an extreme point of the sampled space.
+Emit a warning for each parameter where the optimum was obtained on an extreme point of the sampled space, and return the names of these parameters.
 
 Example: If parameter `a` can take values in 1:10 and the optimum was obtained at
-`a = 1`, it's an indication that the parameter was constraind by the search space.
+`a = 1`, it's an indication that the parameter was constrained by the search space.
 The warning is effective even if the lowest value of `a` that was sampled was higher than 1,
-but the optimum occured on the lowest sampled value.
+but the optimum occurred on the lowest sampled value.
+
+Only parameters whose candidates are real numbers with more than three distinct values are considered, since categorical candidates have no order.
 """
 function warn_on_boundary(ho, sense = :min)
     m = sense == :min ? ho.minimizer : ho.maximizer
-    n_params = length(m)
-    extremas = map(1:n_params) do i
-        c = ho.candidates[i]
-        if c isa AbstractArray{<:Real} 
-            extrema(getindex.(ho.history, i))
-        else
-            (m[i],)
-        end
-    end
+    on_boundary = Symbol[]
     for i in eachindex(m)
         c = unique(ho.candidates[i])
-        if m[i] ∈ extremas[i] && length(c) > 3
-            println("Parameter $(ho.params[i]) obtained its optimum on an extremum of the sampled region: $(m[i])")
+        (length(c) > 3 && all(x -> x isa Real, c)) || continue
+        if m[i] ∈ extrema(h[i] for h in ho.history)
+            @warn "Parameter $(ho.params[i]) obtained its optimum on an extremum of the sampled region: $(m[i])"
+            push!(on_boundary, Symbol(ho.params[i]))
         end
     end
+    on_boundary
 end
 
 include("plotting.jl")
 
-function __init__()
-    Requires.@require Optim="429524aa-4258-5aef-a3af-852621145aeb" include("optim.jl")
-end
+"""
+    hyperoptim(f, candidates, algorithm = Optim.NelderMead(), opts = Optim.Options(); R = 30, η = 3, inner = RandomSampler(), threads = true, verbose = false, Rmin = 0.1, kwargs...)
+
+Multi-start optimization with Optim and Hyperband. The interface is similar to that of `Optim.optimize`, but the initial guess is replaced by a vector of candidate vectors. The resources are used to set the allowed time for optimization by `Optim.optimize`.
+
+This function requires Optim.jl to be loaded, i.e., `using Optim`.
+
+# Arguments:
+- `f` a function from `Rⁿ -> R`, i.e., it takes a vector of parameters.
+- `candidates`: A vector of vectors
+- `algorithm`: One of the Optim algorithms
+- `opts`: `Optim.Options`. The field `time_limit` is replaced by the resources allocated to each call to `Optim.optimize`.
+- `inner`: The inner sampler
+- `threads`: Use threading to evaluate the cost function
+- `verbose`: Print the resources and the minimum after each call to `Optim.optimize`.
+- `Rmin`: The minimum amount of resources to use.
+- `kwargs`: Are sent to `Optim.optimize`.
+
+See `?hyperband` for the remaining arguments.
+"""
+function hyperoptim end
 
 end # module

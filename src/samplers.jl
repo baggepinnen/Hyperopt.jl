@@ -3,14 +3,14 @@
 
 Sample a value for each parameter uniformly at random from the candidate vectors. Log-uniform sampling available by providing a log-spaced candidate vector.
 
-Optionally, pass an `AbstractRNG` to initialize.
+Optionally, pass an `AbstractRNG` to initialize. By default, a `Xoshiro` generator is seeded with a random number drawn from the global RNG, so that `Random.seed!` makes the samples reproducible.
 """
 struct RandomSampler{T<:AbstractRNG} <: Sampler
     rng_channel::RemoteChannel{Channel{T}}
     lock::ReentrantLock
 end
 
-RandomSampler() = RandomSampler(MersenneTwister(rand(1:1000)))
+RandomSampler() = RandomSampler(Xoshiro(rand(UInt)))
 
 function RandomSampler(rng::T) where {T <: AbstractRNG}
     # We use a *single* RNG across threads and processors to ensure
@@ -118,7 +118,7 @@ function hyperband(ho::Hyperoptimizer{Hyperband}; threads=false)
     
     B = (smax + 1)*R # B is budget
     
-    p = Progress(smax+1, 1, "Hyperband")
+    p = Progress(smax+1; dt=1, desc="Hyperband", enabled=SHOW_PROGRESS[])
     for s in smax:-1:0
         n = ceil(Int, (B/R)*((η^s)/(s+1)))
         r = R / (η^s)
@@ -157,7 +157,6 @@ function successive_halving(ho, n, r=1, s=round(Int, log(hb.η, n)); threads=fal
         end
         kept = perm[1:floor(Int,nᵢ/η)]
         C, T = C[kept], T[kept]
-        Base.CoreLogging.@logmsg -1 "successive_halving" progress=i/s
     end
     return minimum
 end

@@ -1,37 +1,46 @@
 name = "Hyperopt"
 uuid = "93e5fe13-2215-51db-baaf-2e9a34fb2712"
-author = ["Fredrik Bagge Carlson <baggepinnen@gmail.com>"]
+authors = ["Fredrik Bagge Carlson <baggepinnen@gmail.com>"]
 version = "0.5.6"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 LatinHypercubeSampling = "a5e1c1ea-c99a-51d3-a14d-a9a37257b02d"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
-Requires = "ae029012-a4dd-5104-9daa-d747884805df"
-Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
-Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ThreadPools = "b189fb0b-2eb5-4ed4-bc0c-d34c51242431"
 
+[weakdeps]
+Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+
+[extensions]
+HyperoptOptimExt = "Optim"
+
 [compat]
+Aqua = "0.8"
+Distributed = "1"
 LatinHypercubeSampling = "1.2"
 MacroTools = "0.5"
-ProgressMeter = "1.7"
+Optim = "1, 2"
+Plots = "1"
+Printf = "1"
+ProgressMeter = "1.10"
+Random = "1"
 RecipesBase = "0.7, 0.8, 1.0"
-Requires = "1"
-Setfield = "0.7, 0.8, 1.0"
 Statistics = "1"
+Test = "1"
 ThreadPools = "1, 2"
 julia = "1.10"
 
 [extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Optim", "Plots"]
+test = ["Aqua", "Optim", "Plots", "Statistics", "Test"]
